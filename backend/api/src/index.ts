@@ -8,6 +8,7 @@ import { ConfigError, loadConfig, type AppConfigEnv } from "./config";
 import { MongoStore } from "./db/mongo";
 import { ChargerRegistry, OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
+import { ChargingSessionService } from "./sessions/service";
 
 function loggerOptions(config: AppConfigEnv) {
   if (config.nodeEnv === "production") return { level: "info" };
@@ -36,13 +37,16 @@ async function main(): Promise<void> {
   await store.ensureIndexes();
   const chargers = new ChargerRegistry();
   const events = new SessionEventBus();
-
-  const app = await buildApp({ config, chain, chargers, events, store, logger: loggerOptions(config) });
+  const sessions = new ChargingSessionService(store, chain, events, config);
   const ocpp = new OcppCentralSystem({
     port: config.ocppPort,
     registry: chargers,
-    logger: app.log.child({ component: "ocpp" }),
+    store,
+    sessions,
   });
+  sessions.setCommands(ocpp);
+  const app = await buildApp({ config, chain, chargers, events, sessions, ocpp, store, logger: loggerOptions(config) });
+  ocpp.setLogger(app.log.child({ component: "ocpp" }));
 
   // Never log the key; only the derived settler address.
   app.log.info(

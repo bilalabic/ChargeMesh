@@ -1,0 +1,149 @@
+import {
+  ChargingSession,
+  CreateReservationResponse,
+  DemoSeedResponse,
+  ProofResponse,
+  type ChargeIntent,
+} from "@chargemesh/shared";
+import type { FastifyInstance } from "fastify";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildApp } from "../app";
+import { createMockChainGateway, type MockChainGateway } from "../chain";
+import { loadConfig, type AppConfigEnv } from "../config";
+import { MemoryStore } from "../db/memory";
+import { ChargerRegistry } from "../ocpp/server";
+import { SessionEventBus, type SessionEvent } from "./events";
+import { ChargingSessionService, type OcppCommands } from "./service";
+
+const HOST = "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
+const DRIVER = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
+const TX = `0x${"34".repeat(32)}`;
+const API = "/api/v1";
+const headers = (wallet: string) => ({ "x-wallet-address": wallet });
+
+describe("charging session lifecycle", () => {
+  let app: FastifyInstance;
+  let config: AppConfigEnv;
+  let store: MemoryStore;
+  let chain: MockChainGateway;
+  let service: ChargingSessionService;
+  let events: SessionEventBus;
+  let commands: OcppCommands;
+  let seed: DemoSeedResponse;
+
+  beforeEach(async () => {
+    config = loadConfig({ NODE_ENV: "test", CHAIN_MODE: "mock" });
+    store = new MemoryStore();
+    chain = createMockChainGateway({ chainId: config.chainId });
+    events = new SessionEventBus();
+    commands = {
+      isConnected: () => true,
+      remoteStart: vi.fn(async () => "Accepted" as const),
+      remoteStop: vi.fn(async () => "Accepted" as const),
+    };
+    service = new ChargingSessionService(store, chain, events, config);
+    service.setCommands(commands);
+    app = await buildApp({ config, chain, events, sessions: service, store, chargers: new ChargerRegistry() });
+    await app.ready();
+    const response = await app.inject({ method: "POST", url: `${API}/demo/seed`, headers: headers(HOST) });
+    seed = DemoSeedResponse.parse(response.json());
+  });
+
+  afterEach(async () => app.close());
+
+  async function confirmedReservation(): Promise<CreateReservationResponse> {
+    const intentResponse = await app.inject({
+      method: "POST",
+      url: `${API}/intents`,
+      headers: headers(DRIVER),
+      payload: {
+        lat: 40.9875,
+        lng: 29.03,
+        arriveAt: new Date(Date.now() + 60_000).toISOString(),
+        departAt: new Date(Date.now() + 4 * 60 * 60_000).toISOString(),
+        requestedWh: 20_000,
+        connectorType: "TYPE2",
+        acceptedAccessTypes: ["GATED_PARKING"],
+      },
+    });
+    const intent = intentResponse.json() as ChargeIntent;
+    const createResponse = await app.inject({
+      method: "POST",
+      url: `${API}/reservations`,
+      headers: headers(DRIVER),
+      payload: { intentId: intent.id, slotId: seed.slot.id },
+    });
+    const created = CreateReservationResponse.parse(createResponse.json());
+    const confirmResponse = await app.inject({
+      method: "POST",
+      url: `${API}/reservations/${created.reservation.id}/confirm`,
+      headers: headers(DRIVER),
+      payload: { txHash: TX },
+    });
+    expect(confirmResponse.statusCode).toBe(200);
+    return created;
+  }
+
+  it("starts, meters, auto-stops, settles and exposes a verified proof", async () => {
+    const reservation = await confirmedReservation();
+    const startResponse = await app.inject({
+      method: "POST",
+      url: `${API}/sessions/start`,
+      headers: headers(DRIVER),
+      payload: {
+        chargePointId: seed.node.ocppChargePointId,
+        connectorId: seed.node.ocppConnectorId,
+        reservationId: reservation.reservation.id,
+      },
+    });
+    expect(startResponse.statusCode).toBe(201);
+    const starting = ChargingSession.parse(startResponse.json());
+    const document = await store.findSession(starting.id);
+    if (!document) throw new Error("session was not stored");
+    const published: SessionEvent[] = [];
+    const unsubscribe = events.subscribe(document._id, (event) => published.push(event));
+
+    const transaction = await service.onStartTransaction({
+      chargePointId: document.chargePointId,
+      connectorId: document.connectorId,
+      idTag: document.ocppIdTag,
+      meterStartWh: 1_000_000,
+      timestamp: new Date(),
+    });
+    expect(transaction.accepted).toBe(true);
+    await service.onMeter({
+      chargePointId: document.chargePointId,
+      transactionId: transaction.transactionId,
+      sampledAt: new Date(),
+      energyWh: 1_000_000 + document.requestedWh,
+      powerW: 7_400,
+      raw: { meterValue: [] },
+    });
+    expect(commands.remoteStop).toHaveBeenCalledWith(document.chargePointId, transaction.transactionId);
+    expect((await store.findSession(document._id))?.status).toBe("STOPPING");
+
+    const stopped = await service.onStopTransaction({
+      chargePointId: document.chargePointId,
+      transactionId: transaction.transactionId,
+      meterStopWh: 1_000_000 + document.requestedWh,
+      stoppedAt: new Date(),
+      reason: "Remote",
+    });
+    expect(stopped).toBe(true);
+    expect((await store.findSession(document._id))?.status).toBe("SETTLED");
+    expect(published.some((event) => event.event === "meter")).toBe(true);
+    expect(published.some((event) => event.event === "settled")).toBe(true);
+    unsubscribe();
+
+    const proofResponse = await app.inject({
+      method: "GET",
+      url: `${API}/reservations/${reservation.reservation.id}/proof`,
+      headers: headers(DRIVER),
+    });
+    expect(proofResponse.statusCode).toBe(200);
+    const proof = ProofResponse.parse(proofResponse.json());
+    expect(proof.verified).toBe(true);
+    expect(proof.summary.deliveredWh).toBe(document.requestedWh);
+    expect(proof.summary.meterSamples.count).toBe(1);
+  });
+});

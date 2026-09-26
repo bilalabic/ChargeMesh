@@ -20,12 +20,14 @@ import { slotRoutes } from "./http/routes/slots";
 import { healthPayload, systemRoutes } from "./http/routes/system";
 import { ChargerRegistry, type OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
+import { ChargingSessionService } from "./sessions/service";
 
 export interface AppDeps {
   config: AppConfigEnv;
   chain: ChainGateway;
   chargers?: ChargerRegistry;
   events?: SessionEventBus;
+  sessions?: ChargingSessionService;
   ocpp?: OcppCentralSystem | null;
   store?: Store;
   /** Fastify logger option; defaults to off (tests). */
@@ -33,13 +35,17 @@ export interface AppDeps {
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const store = deps.store ?? new MemoryStore();
+  const events = deps.events ?? new SessionEventBus();
+  const sessions = deps.sessions ?? deps.ocpp?.sessions ?? new ChargingSessionService(store, deps.chain, events, deps.config);
   const routeDeps: RouteDeps = {
     config: deps.config,
     chain: deps.chain,
     chargers: deps.chargers ?? deps.ocpp?.registry ?? new ChargerRegistry(),
-    events: deps.events ?? new SessionEventBus(),
+    events,
+    sessions,
     ocpp: deps.ocpp ?? null,
-    store: deps.store ?? new MemoryStore(),
+    store,
   };
 
   const app = Fastify({ logger: deps.logger ?? false });

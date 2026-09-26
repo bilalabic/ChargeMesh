@@ -8,7 +8,7 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 | 2 · Atlas veri katmanı | Tamamlandı | `refactor(backend): replace postgres with mongodb atlas` | API ve sim: typecheck, lint, test geçti |
 | 3 · Host, slot, seed ve matching | Tamamlandı | `feat(backend): implement nodes slots and matching` | API ve sim: typecheck, lint, test geçti |
 | 4 · Rezervasyon yaşam döngüsü | Tamamlandı | `feat(backend): implement reservation lifecycle` | API ve sim: typecheck, lint, test geçti |
-| 5 · OCPP, oturum ve Proof of Charge | Bekliyor | `feat(backend): complete OCPP charging sessions` | typecheck, lint, test |
+| 5 · OCPP, oturum ve Proof of Charge | Tamamlandı | `feat(backend): complete OCPP charging sessions` | API ve sim: typecheck, lint, test geçti |
 | 6 · M1 uçtan uca kabul | Bekliyor | `test(backend): cover mock demo workflow` | typecheck, lint, test, Atlas smoke (opsiyonel) |
 | 7 · M2 Anvil entegrasyonu | Bekliyor | `test(backend): add anvil chain integration` | Anvil deployment varsa çalıştırılır |
 | 8 · M3–M4 canlı mod ve kurtarma | Bekliyor | `fix(backend): harden settlement recovery and live mode` | mock/anvil; Monad işlemi ayrıca onay gerektirir |
@@ -47,4 +47,16 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 - Zincirdeki `Reserved`, `Active`, `Settled`, `Cancelled` ve `Expired` durumları yerel kayda senkronize ediliyor; cancel/expire slotu yeniden açıyor.
 - Eşzamanlı claim, confirm idempotency, erişim gizliliği ve cancel sync HTTP testleri eklendi.
 - `@chargemesh/api`: typecheck, lint ve 22 test geçti.
+- `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.
+
+## Faz 5 · OCPP, oturum ve Proof of Charge
+
+- Kayıtlı olmayan charge point için `BootNotification` reddediliyor; kabul edilen cihaz ve connector durumu registry'ye işleniyor.
+- OCPP CALL, CALLRESULT ve CALLERROR frame'leri yön, mesaj kimliği, eylem ve ham payload ile `ocppMessages` koleksiyonuna kaydediliyor.
+- Session start/get/stop, artan OCPP transaction ID, meter sample saklama ve hedef enerjiye ulaşınca otomatik durdurma tamamlandı.
+- `StartTransaction`, `MeterValues` ve `StopTransaction` akışı zincirde start/settle işlemleriyle bağlandı.
+- Proof of Charge özeti, sample hash'i, kanonik JSON ve session hash yalnızca shared yardımcılarıyla üretiliyor; proof endpoint'i zincir hash'ini doğruluyor.
+- SSE ilk `session.updated`, meter, settled, error ve 15 saniyelik ping olaylarını yayınlıyor.
+- Kayıtlı/kayıtsız OCPP boot ve tam session → settlement → proof akışı test edildi.
+- `@chargemesh/api`: typecheck, lint ve 24 test geçti.
 - `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.

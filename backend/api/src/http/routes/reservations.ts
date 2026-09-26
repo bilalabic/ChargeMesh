@@ -4,9 +4,12 @@ import {
   CreateReservationRequest,
   CreateReservationResponse,
   ListReservationsQuery,
+  ProofOfChargeSummary,
+  ProofResponse,
   ReservationQuote,
   SyncReservationRequest,
   computeSettlement,
+  computeSessionHash,
   toOnchainReservationId,
   type ReservationStatus,
 } from "@chargemesh/shared";
@@ -16,7 +19,7 @@ import { z } from "zod";
 import { findMatches, toReservation } from "../../domain";
 import type { ReservationDocument, ReservationPatch } from "../../db/types";
 import { assertOwner, requireWallet } from "../auth";
-import { ApiError, notImplemented } from "../errors";
+import { ApiError } from "../errors";
 import type { RouteDeps } from "./deps";
 
 const ReservationParams = z.object({ id: z.uuid() });
@@ -203,6 +206,44 @@ export function reservationRoutes(deps: RouteDeps): FastifyPluginAsync {
       return toReservation(deps.store, reservation, wallet, deps.chargers);
     });
 
-    app.get("/reservations/:id/proof", async (_request, reply) => notImplemented(reply));
+    app.get("/reservations/:id/proof", async (request) => {
+      const wallet = requireWallet(request);
+      const { id } = ReservationParams.parse(request.params);
+      const reservation = await loadReservation(deps, id);
+      assertParty(wallet, reservation);
+      const session = await deps.store.findSessionByReservation(id);
+      if (!session || !session.proofCanonicalJson || !session.sessionHash) {
+        throw new ApiError("INVALID_STATE", "Proof of Charge is not available yet");
+      }
+      const summary = ProofOfChargeSummary.parse(JSON.parse(session.proofCanonicalJson));
+      const onchainReservation = await deps.chain.readReservation(reservation.onchainId as Hex);
+      const hasSettlement =
+        reservation.settleTxHash !== null &&
+        reservation.settledDeliveredWh !== null &&
+        reservation.billableWh !== null &&
+        reservation.hostAmountWei !== null &&
+        reservation.refundWei !== null &&
+        reservation.sessionHash !== null;
+      const onchain = hasSettlement
+        ? {
+            sessionHash: reservation.sessionHash!,
+            deliveredWh: reservation.settledDeliveredWh!,
+            billableWh: reservation.billableWh!,
+            hostAmountWei: reservation.hostAmountWei!,
+            refundWei: reservation.refundWei!,
+            txHash: reservation.settleTxHash!,
+          }
+        : null;
+      return ProofResponse.parse({
+        summary,
+        canonicalJson: session.proofCanonicalJson,
+        sessionHash: session.sessionHash,
+        onchain,
+        verified:
+          onchain !== null &&
+          computeSessionHash(summary) === session.sessionHash &&
+          onchainReservation?.sessionHash.toLowerCase() === session.sessionHash.toLowerCase(),
+      });
+    });
   };
 }
