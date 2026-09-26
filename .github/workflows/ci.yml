@@ -29,7 +29,7 @@ jobs:
       - name: Test
         run: pnpm test
       - name: Build web
-        run: pnpm --filter @chargemesh/web build
+        run: pnpm --filter @chargemesh/frontend build
 
   contracts:
     name: Contracts (Foundry)

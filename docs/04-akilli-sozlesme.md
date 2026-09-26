@@ -2,7 +2,7 @@
 
 > Sürüm: v1.0 · Sahibi: Blockchain ekibi
 >
-> **Tek doğruluk kaynağı** `contracts/src/interfaces/IChargeMeshEscrow.sol` dosyasıdır. Frontend ve backend'in kullandığı ABI bu arayüzden üretilir ve `packages/shared/src/chain/abi.ts` dosyasına yazılır. Arayüz değişirse ABI yeniden üretilmeden commit yapılmaz.
+> **Tek doğruluk kaynağı** `contracts/src/interfaces/IChargeMeshEscrow.sol` dosyasıdır. Frontend ve backend'in kullandığı ABI bu arayüzden üretilir ve `shared/src/chain/abi.ts` dosyasına yazılır. Arayüz değişirse ABI yeniden üretilmeden commit yapılmaz.
 
 ## Amaç
 
@@ -67,7 +67,7 @@ struct Reservation {
 ReservationQuote(bytes32 reservationId,bytes32 slotRef,address driver,address host,uint32 requestedWh,uint128 pricePerKwhWei,uint128 depositWei,uint64 startTime,uint64 endTime,uint64 quoteExpiry)
 ```
 
-TypeScript karşılığı `packages/shared/src/chain/eip712.ts` dosyasındadır (`reservationQuoteTypes`, `getEip712Domain`). Backend `signTypedData`, sözleşme ise OpenZeppelin `EIP712` ve `ECDSA` kullanır. Sözleşmedeki type string'i ile TypeScript tanımı karakteri karakterine aynı olmalıdır. Blockchain ekibi bunu bir Foundry testiyle doğrular (bkz. [Test gereksinimleri](#test-gereksinimleri)).
+TypeScript karşılığı `shared/src/chain/eip712.ts` dosyasındadır (`reservationQuoteTypes`, `getEip712Domain`). Backend `signTypedData`, sözleşme ise OpenZeppelin `EIP712` ve `ECDSA` kullanır. Sözleşmedeki type string'i ile TypeScript tanımı karakteri karakterine aynı olmalıdır. Blockchain ekibi bunu bir Foundry testiyle doğrular (bkz. [Test gereksinimleri](#test-gereksinimleri)).
 
 ## Fonksiyonlar
 
@@ -85,7 +85,7 @@ TypeScript karşılığı `packages/shared/src/chain/eip712.ts` dosyasındadır 
 | `hashQuote(ReservationQuote)` | view | | EIP-712 digest (hata ayıklama için) |
 | `SETTLEMENT_GRACE()` | view | | `1 days` |
 
-**Hesaplaşma formülü** (`packages/shared/src/units.ts` ile birebir aynı):
+**Hesaplaşma formülü** (`shared/src/units.ts` ile birebir aynı):
 
 ```
 billableWh  = min(deliveredWh, requestedWh)
@@ -153,7 +153,7 @@ Blockchain ekibi en az şu Foundry testlerini yazar:
 - `startSession` ve `settle`: tam teslim, kısmi teslim (`delivered < requested`), fazla teslim (`delivered > requested`) ve `delivered = 0` durumları. Bakiyeler kuruşu kuruşuna doğrulanır.
 - `cancel` ve `expire` için zaman sınırları (`vm.warp`)
 - Reentrancy: Host adresi kötü niyetli bir sözleşme olduğunda `settle` yeniden giriş yapamaz.
-- **EIP-712 uyumu:** `packages/shared` ile üretilen örnek bir imza (sabit anahtar, sabit teklif, `test/fixtures/quote-signature.json`) sözleşme tarafından doğrulanmalıdır. Bu test, TypeScript ile Solidity tanımlarının birbirinden ayrışmasını önler.
+- **EIP-712 uyumu:** `shared` ile üretilen örnek bir imza (sabit anahtar, sabit teklif, `test/fixtures/quote-signature.json`) sözleşme tarafından doğrulanmalıdır. Bu test, TypeScript ile Solidity tanımlarının birbirinden ayrışmasını önler.
 - Fuzz: Rastgele `requestedWh`, `deliveredWh` ve `pricePerKwhWei` değerlerinde `hostAmount + refund == deposit` her zaman sağlanmalıdır.
 
 ## Deploy ve adres yayını
@@ -161,7 +161,7 @@ Blockchain ekibi en az şu Foundry testlerini yazar:
 1. **Yerel:** WSL'de `anvil` çalıştırılır, ardından `forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast` komutuyla deploy yapılır.
 2. **Testnet:** `--rpc-url https://testnet-rpc.monad.xyz` kullanılır. Doğrulama komutu: `forge verify-contract <adres> ChargeMeshEscrow --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`
 3. Deploy betiği, adresi ve blok numarasını `contracts/deployments/<chainId>.json` dosyasına yazar (`{ "chainId", "escrow", "settler", "deployBlock" }`).
-4. Ardından Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `contracts/out/` altındaki ABI'yi `packages/shared/src/chain/abi.ts`, deploy JSON'larını da `packages/shared/src/chain/deployments.ts` dosyasına yazar. Üretilen dosyalar elle düzenlenmez.
+4. Ardından Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `contracts/out/` altındaki ABI'yi `shared/src/chain/abi.ts`, deploy JSON'larını da `shared/src/chain/deployments.ts` dosyasına yazar. Üretilen dosyalar elle düzenlenmez.
 5. Adres değişikliği tek başına bir commit olur: `chore(contracts): deploy escrow to monad testnet`.
 
 `DEPLOYER_PRIVATE_KEY` ve `SETTLER_PRIVATE_KEY` yalnızca testnet anahtarlarıdır. Hiçbir koşulda commit edilmez ve mainnet'te kullanılmaz.

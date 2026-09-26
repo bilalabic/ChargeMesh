@@ -1,6 +1,6 @@
 # contracts: Blockchain Ajan Talimatları
 
-Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün sahibi **Blockchain** ekibidir. Bu klasör dışında yalnızca `chain:sync` ile **üretilen** `packages/shared/src/chain/abi.ts` ve `deployments.ts` dosyalarını değiştirebilirsin.
+Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün sahibi **Blockchain** ekibidir. Bu klasör dışında yalnızca `chain:sync` ile **üretilen** `shared/src/chain/abi.ts` ve `deployments.ts` dosyalarını değiştirebilirsin.
 
 Spesifikasyon: `docs/04-akilli-sozlesme.md`. Donmuş arayüz: `src/interfaces/IChargeMeshEscrow.sol`.
 
@@ -25,7 +25,7 @@ corepack pnpm --filter @chargemesh/shared chain:sync
 ## Kurallar
 
 - `ChargeMeshEscrow`, `IChargeMeshEscrow` arayüzünü uygular. Arayüzü değiştirmek sözleşme değişikliği protokolüne tabidir.
-- Hesaplaşma formülü `packages/shared/src/units.ts` ile birebir aynıdır. Yuvarlama yönlerine dikkat et: depozito yukarı, Host tutarı aşağı yuvarlanır.
+- Hesaplaşma formülü `shared/src/units.ts` ile birebir aynıdır. Yuvarlama yönlerine dikkat et: depozito yukarı, Host tutarı aşağı yuvarlanır.
 - Checks-effects-interactions ve `nonReentrant` kullan. Durum, transferden önce güncellenir.
 - Custom error kullan, `require` ile string kullanma.
 - `test/fixtures/quote-signature.json`, TypeScript tarafında `corepack pnpm --filter @chargemesh/shared fixture:quote` ile üretilir. EIP-712 uyum testi bu dosyayı okur; dosyayı elle düzenleme.

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 /// @title IChargeMeshEscrow
 /// @notice Frozen v1 interface. Spec: docs/04-akilli-sozlesme.md.
-/// @dev The ABI in packages/shared/src/chain/abi.ts is generated from this contract family.
+/// @dev The ABI in shared/src/chain/abi.ts is generated from this contract family.
 ///      Changing this file requires the contract change protocol (docs/07-paralel-calisma.md).
 interface IChargeMeshEscrow {
     enum Status {

@@ -16,7 +16,7 @@ Her üç cüzdanda da [faucet](https://faucet.monad.xyz) üzerinden alınmış t
 
 ## Sabit demo verisi
 
-`POST /demo/seed` bu değerleri oluşturur. Fixture'lar da aynı değerleri kullanır (`packages/shared/src/fixtures`).
+`POST /demo/seed` bu değerleri oluşturur. Fixture'lar da aynı değerleri kullanır (`shared/src/fixtures`).
 
 | Alan | Değer |
 | --- | --- |

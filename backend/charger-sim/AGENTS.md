@@ -1,4 +1,4 @@
-# apps/charger-sim: OCPP Simülatörü Ajan Talimatları
+# backend/charger-sim: OCPP Simülatörü Ajan Talimatları
 
 Kök `AGENTS.md` kuralları geçerlidir. Sahibi **Backend** ekibidir. Davranış spesifikasyonu: `docs/05-ocpp.md`.
 

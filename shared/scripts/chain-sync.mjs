@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const contractsDir = resolve(here, "../../../contracts");
+const contractsDir = resolve(here, "../../contracts");
 const chainDir = resolve(here, "../src/chain");
 
 const candidates = [

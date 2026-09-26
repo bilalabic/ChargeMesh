@@ -2,7 +2,7 @@
 
 > Sürüm: v1.0 · Sahibi: Backend (değişiklik protokolü için bkz. [07-paralel-calisma.md](07-paralel-calisma.md#sözleşme-değişikliği-protokolü))
 >
-> **Tek doğruluk kaynağı** `packages/shared/src/api/` altındaki zod şemalarıdır. Bu belge o şemaları insanlar için anlatır. İkisi çelişirse şema geçerlidir ve belge düzeltilir.
+> **Tek doğruluk kaynağı** `shared/src/api/` altındaki zod şemalarıdır. Bu belge o şemaları insanlar için anlatır. İkisi çelişirse şema geçerlidir ve belge düzeltilir.
 
 ## Genel kurallar
 
@@ -51,7 +51,7 @@ x-wallet-address: 0xAbC...123
 
 ## Kimlik dönüşümleri
 
-`packages/shared/src/ids.ts` içinde tanımlıdır. Tüm bileşenler bu fonksiyonları kullanır, kendi versiyonunu yazmaz.
+`shared/src/ids.ts` içinde tanımlıdır. Tüm bileşenler bu fonksiyonları kullanır, kendi versiyonunu yazmaz.
 
 | Fonksiyon | Tanım | Örnek kullanım |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ x-wallet-address: 0xAbC...123
 
 ## Veri modelleri
 
-Tüm modeller `packages/shared/src/api/schemas.ts` içindedir. Kısa özet:
+Tüm modeller `shared/src/api/schemas.ts` içindedir. Kısa özet:
 
 ### Enum'lar
 
@@ -355,7 +355,7 @@ Bağlantı açıldığında sunucu önce güncel `session.updated` olayını gö
 
 ## Eşleştirme algoritması
 
-`packages/shared/src/matching.ts` içinde saf fonksiyon olarak tanımlıdır (`rankMatches`). Backend bu fonksiyonu çağırır; web ise mock modunda aynı fonksiyonu fixture'larla kullanır.
+`shared/src/matching.ts` içinde saf fonksiyon olarak tanımlıdır (`rankMatches`). Backend bu fonksiyonu çağırır; frontend ise mock modunda aynı fonksiyonu fixture'larla kullanır.
 
 Her aday slot için (`status = OPEN` veya süresi dolmuş `HELD`):
 
@@ -378,7 +378,7 @@ Sıralama sırasıyla şu anahtarlara göre yapılır:
 
 ## Birim ve ücret hesapları
 
-`packages/shared/src/units.ts` dosyası, sözleşmeyle **bire bir aynı** tam sayı aritmetiğini kullanır:
+`shared/src/units.ts` dosyası, sözleşmeyle **bire bir aynı** tam sayı aritmetiğini kullanır:
 
 | Fonksiyon | Tanım |
 | --- | --- |

@@ -1,4 +1,4 @@
-# packages/shared: Ortak Sözleşme Paketi
+# shared: Ortak Sözleşme Paketi
 
 Kök `AGENTS.md` kuralları geçerlidir. Bu paket, ekipler arasındaki **sözleşmedir**. Burada yapılan her değişiklik diğer ekiplerin kodunu etkiler.
 

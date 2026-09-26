@@ -179,7 +179,7 @@ contract ChargeMeshEscrowTest is Test {
     // Reentrancy: malicious host contract cannot re-enter settle
     function todo_settle_maliciousHostCannotReenter() public {}
 
-    // EIP-712 compatibility: covered by test/Eip712Compat.t.sol (fixture from packages/shared)
+    // EIP-712 compatibility: covered by test/Eip712Compat.t.sol (fixture from shared)
 
     // Fuzz: hostAmount + refund == deposit for random requestedWh, deliveredWh, pricePerKwhWei
     function todo_testFuzz_settle_conservesDeposit() public {}

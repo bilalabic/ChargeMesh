@@ -1,6 +1,6 @@
-# apps/web: Frontend Ajan Talimatları
+# frontend: Frontend Ajan Talimatları
 
-Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün sahibi **Frontend** ekibidir. Bu klasör dışında yalnızca `packages/shared/src/fixtures/**` dosyalarını değiştirebilirsin.
+Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün sahibi **Frontend** ekibidir. Bu klasör dışında yalnızca `shared/src/fixtures/**` dosyalarını değiştirebilirsin.
 
 ## Teknoloji
 
@@ -38,11 +38,11 @@ Arayüz metinleri Türkçedir. Mobil genişlikte (QR okutma telefonda yapılır)
 ## Komutlar
 
 ```powershell
-corepack pnpm --filter @chargemesh/web dev        # http://localhost:3000
-corepack pnpm --filter @chargemesh/web typecheck
-corepack pnpm --filter @chargemesh/web lint
-corepack pnpm --filter @chargemesh/web test
-corepack pnpm --filter @chargemesh/web build
+corepack pnpm --filter @chargemesh/frontend dev        # http://localhost:3000
+corepack pnpm --filter @chargemesh/frontend typecheck
+corepack pnpm --filter @chargemesh/frontend lint
+corepack pnpm --filter @chargemesh/frontend test
+corepack pnpm --filter @chargemesh/frontend build
 ```
 
 ## Bitti tanımı (M1)

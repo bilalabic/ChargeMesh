@@ -33,17 +33,16 @@ flowchart LR
 
 ```
 ChargeMesh/
-├── apps/
-│   ├── web/            Host ve Driver arayüzü (Next.js, wagmi)
-│   ├── api/            REST API, eşleştirme, OCPP merkezi, zincir istemcisi (Fastify)
-│   └── charger-sim/    OCPP 1.6J şarj cihazı simülatörü
-├── contracts/          ChargeMeshEscrow akıllı sözleşmesi (Solidity, Foundry)
-├── packages/
-│   └── shared/         Ekipler arası sözleşme: API şemaları, ABI, EIP-712, hash ve ücret hesabı
-└── docs/               Ürün ve teknik spesifikasyon
+├── frontend/             Frontend ekibi: Host ve Driver arayüzü (Next.js, wagmi)
+├── backend/              Backend ekibi
+│   ├── api/              REST API, eşleştirme, OCPP merkezi, zincir istemcisi (Fastify)
+│   └── charger-sim/      OCPP 1.6J şarj cihazı simülatörü
+├── contracts/            Blockchain ekibi: ChargeMeshEscrow akıllı sözleşmesi (Solidity, Foundry)
+├── shared/               Ekipler arası sözleşme: API şemaları, ABI, EIP-712, hash ve ücret hesabı
+└── docs/                 Ürün ve teknik spesifikasyon
 ```
 
-Her klasörün kendi README'si vardır. Spesifikasyonlar `docs/` altında numaralı olarak durur:
+Üç ekibin her biri yalnızca kendi klasöründe çalışır: `frontend/`, `backend/` ve `contracts/`. Ortak tanımlar `shared/` klasöründe, spesifikasyonlar ise `docs/` klasöründe durur. Her klasörün kendi README'si vardır. Spesifikasyonlar `docs/` altında numaralı olarak durur:
 
 | Belge | İçerik |
 | --- | --- |
@@ -79,17 +78,17 @@ corepack pnpm install
 Arayüzü tek başına, sahte verilerle görmek için:
 
 ```powershell
-Copy-Item apps/web/.env.example apps/web/.env.local
-corepack pnpm dev:web          # http://localhost:3000
+Copy-Item frontend/.env.example frontend/.env.local
+corepack pnpm dev:frontend          # http://localhost:3000
 ```
 
 API'yi ve simülatörü zincir olmadan çalıştırmak için:
 
 ```powershell
 corepack pnpm db:up            # PostgreSQL :5433
-Copy-Item apps/api/.env.example apps/api/.env      # CHAIN_MODE=mock
+Copy-Item backend/api/.env.example backend/api/.env      # CHAIN_MODE=mock
 corepack pnpm --filter @chargemesh/api db:migrate
-corepack pnpm dev:api          # REST :4000, OCPP :9000
+corepack pnpm dev:backend          # REST :4000, OCPP :9000
 corepack pnpm dev:sim          # ayrı bir terminalde
 ```
 
@@ -116,19 +115,19 @@ Yerel zincirle (Anvil) ve Monad testnet'le çalıştırma adımları için [cont
 
 ## Ekip ve yapay zekâ ajanlarıyla çalışma
 
-Frontend, backend ve blockchain tarafları aynı anda, birbirini beklemeden geliştirilecek şekilde kurgulandı. Ekipler birbirinin koduna değil, `packages/shared` içindeki sözleşmelere ve `docs/` altındaki spesifikasyonlara bağlıdır. Her taraf, karşı tarafı taklit eden bir modla işe başlayabilir: Web sahte veriyle, API zincirsiz modda, sözleşmeler de Foundry testleriyle çalışır.
+Frontend, backend ve blockchain tarafları aynı anda, birbirini beklemeden geliştirilecek şekilde kurgulandı. Ekipler birbirinin koduna değil, `shared` içindeki sözleşmelere ve `docs/` altındaki spesifikasyonlara bağlıdır. Her taraf, karşı tarafı taklit eden bir modla işe başlayabilir: Web sahte veriyle, API zincirsiz modda, sözleşmeler de Foundry testleriyle çalışır.
 
 Proje hem Claude Code hem de Codex ile çalışmaya hazırdır:
 
 - Kökteki ve her alt klasördeki `AGENTS.md`, o alanın kurallarını tanımlar. Codex bu dosyaları doğrudan okur.
 - `CLAUDE.md` dosyaları `@AGENTS.md` ile aynı içeriği Claude Code'a aktarır. Böylece iki araç tek bir kaynaktan beslenir.
-- `.claude/agents/` altında her alan için hazır Claude Code alt ajanları vardır: `web-dev`, `api-dev`, `contracts-dev` ve `integrator`.
+- `.claude/agents/` altında her alan için hazır Claude Code alt ajanları vardır: `frontend-dev`, `backend-dev`, `contracts-dev` ve `integrator`.
 
 Paralel çalışmanın ayrıntıları, dal düzeni ve entegrasyon kontrol listesi [docs/07-paralel-calisma.md](docs/07-paralel-calisma.md) belgesinde.
 
 ## Katkı kuralları
 
-- Commit mesajları İngilizce ve [Conventional Commits](https://www.conventionalcommits.org/) biçimindedir: `feat(web): add driver intent form`.
+- Commit mesajları İngilizce ve [Conventional Commits](https://www.conventionalcommits.org/) biçimindedir: `feat(frontend): add driver intent form`.
 - Her değişiklik kendi dalında yapılır ve PR ile `main` dalına birleştirilir. CI yeşil olmadan birleştirme yapılmaz.
 - `.env` dosyaları, özel anahtarlar ve seed phrase'ler hiçbir koşulda depoya girmez. Yalnızca testnet ve yerel ağ kullanılır.
 

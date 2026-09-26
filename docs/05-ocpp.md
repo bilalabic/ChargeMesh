@@ -1,6 +1,6 @@
 # 05 · OCPP Entegrasyonu ve Simülatör
 
-> Sürüm: v1.0 · Sahibi: Backend ekibi (`apps/api` içindeki Central System ve `apps/charger-sim`)
+> Sürüm: v1.0 · Sahibi: Backend ekibi (`backend/api` içindeki Central System ve `backend/charger-sim`)
 
 ## Neden OCPP?
 
@@ -62,7 +62,7 @@ Sürüm olarak **OCPP 1.6J** (WebSocket üzerinden JSON) kullanıyoruz. En yayg�
 - `StopTransaction` geldiğinde: `deliveredWh = meterStop − meterStart` → Proof of Charge özeti → `settle()`.
 - Tüm ham OCPP çağrıları (yön, eylem, gövde, zaman) hata ayıklama için `ocpp_messages` tablosunda tutulur.
 
-## Simülatör (`apps/charger-sim`)
+## Simülatör (`backend/charger-sim`)
 
 Tek bir charge point'i ve tek bir konektörü taklit eden bir CLI uygulamasıdır.
 

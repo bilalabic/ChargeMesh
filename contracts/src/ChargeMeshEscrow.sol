@@ -28,7 +28,7 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     uint64 public constant SETTLEMENT_GRACE = 1 days;
 
     /// @dev keccak256 of the EIP-712 type string. Must match
-    ///      packages/shared/src/chain/eip712.ts (RESERVATION_QUOTE_TYPESTRING) character for character.
+    ///      shared/src/chain/eip712.ts (RESERVATION_QUOTE_TYPESTRING) character for character.
     bytes32 internal constant RESERVATION_QUOTE_TYPEHASH = keccak256(
         "ReservationQuote(bytes32 reservationId,bytes32 slotRef,address driver,address host,uint32 requestedWh,uint128 pricePerKwhWei,uint128 depositWei,uint64 startTime,uint64 endTime,uint64 quoteExpiry)"
     );
@@ -105,7 +105,7 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
         // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant + onlySettler already applied) checks:
         //  - status == Active                         else InvalidStatus(status)
         //  - sessionHash != 0                         else ZeroSessionHash
-        //  Math (identical to packages/shared/src/units.ts, rounds down):
+        //  Math (identical to shared/src/units.ts, rounds down):
         //    billableWh = min(deliveredWh, requestedWh)
         //    hostAmount = min(billableWh * pricePerKwhWei / 1000, depositWei)
         //    refund     = depositWei - hostAmount

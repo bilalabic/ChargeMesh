@@ -41,7 +41,7 @@ const signature = await settler.signTypedData(typedData);
 
 const out = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../contracts/test/fixtures/quote-signature.json",
+  "../../contracts/test/fixtures/quote-signature.json",
 );
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(

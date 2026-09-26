@@ -1,5 +1,5 @@
 /**
- * ChainGateway: the only way the API touches the chain (apps/api/AGENTS.md).
+ * ChainGateway: the only way the API touches the chain (backend/api/AGENTS.md).
  * CHAIN_MODE=mock -> MockChainGateway (no network), anvil|monad -> ViemChainGateway.
  */
 import type { AppConfigEnv } from "../config";

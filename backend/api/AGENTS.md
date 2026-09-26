@@ -1,6 +1,6 @@
-# apps/api: Backend Ajan Talimatları
+# backend/api: Backend Ajan Talimatları
 
-Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün ve `apps/charger-sim` klasörünün sahibi **Backend** ekibidir. `packages/shared/src/api/**` şemalarının da sahibi sensin, ama bu dosyalardaki değişiklikler protokole tabidir (`docs/07-paralel-calisma.md`).
+Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün ve `backend/charger-sim` klasörünün sahibi **Backend** ekibidir. `shared/src/api/**` şemalarının da sahibi sensin, ama bu dosyalardaki değişiklikler protokole tabidir (`docs/07-paralel-calisma.md`).
 
 ## Teknoloji
 

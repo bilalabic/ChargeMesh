@@ -8,12 +8,12 @@ Ekipler birbirinin **koduna değil, sözleşmelerine** bağımlıdır. Sözleşm
 
 | Sözleşme | Nerede | Kimi bağlar |
 | --- | --- | --- |
-| REST API ve veri modelleri | `packages/shared/src/api/` + [03-api.md](03-api.md) | Web ↔ API |
-| Akıllı sözleşme arayüzü ve ABI | `contracts/src/interfaces/IChargeMeshEscrow.sol` + `packages/shared/src/chain/abi.ts` + [04-akilli-sozlesme.md](04-akilli-sozlesme.md) | Contracts ↔ Web, API |
-| EIP-712 teklif tanımı | `packages/shared/src/chain/eip712.ts` | Contracts ↔ API ↔ Web |
-| Proof of Charge ve kanonik JSON | `packages/shared/src/proof.ts` | API ↔ Web ↔ Contracts |
+| REST API ve veri modelleri | `shared/src/api/` + [03-api.md](03-api.md) | Web ↔ API |
+| Akıllı sözleşme arayüzü ve ABI | `contracts/src/interfaces/IChargeMeshEscrow.sol` + `shared/src/chain/abi.ts` + [04-akilli-sozlesme.md](04-akilli-sozlesme.md) | Contracts ↔ Web, API |
+| EIP-712 teklif tanımı | `shared/src/chain/eip712.ts` | Contracts ↔ API ↔ Web |
+| Proof of Charge ve kanonik JSON | `shared/src/proof.ts` | API ↔ Web ↔ Contracts |
 | OCPP mesajları | [05-ocpp.md](05-ocpp.md) | API ↔ Simülatör |
-| Demo verisi | `packages/shared/src/fixtures/` + [06-demo-senaryosu.md](06-demo-senaryosu.md) | Herkes |
+| Demo verisi | `shared/src/fixtures/` + [06-demo-senaryosu.md](06-demo-senaryosu.md) | Herkes |
 
 Her ekip, karşı tarafı taklit eden bir modla işe başlar:
 
@@ -25,13 +25,13 @@ Her ekip, karşı tarafı taklit eden bir modla işe başlar:
 
 | Yol | Sahip | Diğer ekipler |
 | --- | --- | --- |
-| `apps/web/**` | Frontend | Dokunmaz |
-| `apps/api/**`, `apps/charger-sim/**` | Backend | Dokunmaz |
+| `frontend/**` | Frontend | Dokunmaz |
+| `backend/api/**`, `backend/charger-sim/**` | Backend | Dokunmaz |
 | `contracts/**` | Blockchain | Dokunmaz |
-| `packages/shared/src/chain/abi.ts`, `deployments.ts` | Blockchain (yalnızca `chain:sync` ile üretilir) | Dokunmaz |
-| `packages/shared/src/api/**` | Backend | Ekleme önerir |
-| `packages/shared/src/{ids,units,proof,matching}.ts`, `chain/eip712.ts` | Ortak (sözleşme dosyası) | Protokolle değiştirir |
-| `packages/shared/src/fixtures/**` | Frontend | Backend'in testleri de okuyabilir |
+| `shared/src/chain/abi.ts`, `deployments.ts` | Blockchain (yalnızca `chain:sync` ile üretilir) | Dokunmaz |
+| `shared/src/api/**` | Backend | Ekleme önerir |
+| `shared/src/{ids,units,proof,matching}.ts`, `chain/eip712.ts` | Ortak (sözleşme dosyası) | Protokolle değiştirir |
+| `shared/src/fixtures/**` | Frontend | Backend'in testleri de okuyabilir |
 | `docs/**`, kök yapılandırma, `AGENTS.md`, `CLAUDE.md` | Entegrasyon sorumlusu | Öneri PR'ı açar |
 
 ## Dal ve worktree düzeni
@@ -40,8 +40,8 @@ Her ekip kendi dalında ve ayrı bir klasörde çalışır. Böylece aynı makin
 
 ```powershell
 # Ana klasör: C:\Users\bilal\projects\ChargeMesh  (main)
-git worktree add ..\ChargeMesh-web       -b feat/web
-git worktree add ..\ChargeMesh-api       -b feat/api
+git worktree add ..\ChargeMesh-frontend       -b feat/frontend
+git worktree add ..\ChargeMesh-backend       -b feat/backend
 git worktree add ..\ChargeMesh-contracts -b feat/contracts
 ```
 
@@ -53,8 +53,8 @@ git worktree add ..\ChargeMesh-contracts -b feat/contracts
 ## Commit ve PR kuralları
 
 - Commit mesajları **İngilizce** ve [Conventional Commits](https://www.conventionalcommits.org/) biçimindedir. Kapsam, klasör adıdır:
-  - `feat(web): add driver intent form`
-  - `feat(api): implement deterministic slot matching`
+  - `feat(frontend): add driver intent form`
+  - `feat(backend): implement deterministic slot matching`
   - `test(contracts): cover partial delivery settlement`
   - `feat(shared): add ChargingSession schema` · `docs: clarify quote expiry`
 - Bir commit yalnızca bir ekibin alanına dokunur. Tek istisna, sözleşme değişikliği protokolüyle yapılan `shared` değişiklikleridir.
@@ -67,7 +67,7 @@ Donmuş bir sözleşmenin değiştirilmesi gerekiyorsa şu adımlar izlenir:
 
 1. **Ekleme mi, kırıcı değişiklik mi?** Yeni opsiyonel alan veya yeni uç nokta eklemek *ekleme* sayılır. Alan silmek, yeniden adlandırmak, tip veya anlam değiştirmek ise *kırıcı değişikliktir*.
 2. Değişiklik ayrı bir dalda ve tek bir PR'da yapılır: `contract/<kısa-ad>`. Bu PR şunları içerir:
-   - `packages/shared` içindeki kod değişikliği
+   - `shared` içindeki kod değişikliği
    - İlgili `docs/0x-*.md` güncellemesi
    - [degisiklik-gunlugu.md](degisiklik-gunlugu.md) dosyasına bir satır
 3. Commit türü `feat(shared)!:` (kırıcı) veya `feat(shared):` (ekleme) olur.
@@ -95,8 +95,8 @@ Entegrasyon sorumlusu `integration` dalında çalışır:
 ```powershell
 git switch -c integration main
 git merge feat/contracts
-git merge feat/api
-git merge feat/web
+git merge feat/backend
+git merge feat/frontend
 ```
 
 Kontrol listesi:

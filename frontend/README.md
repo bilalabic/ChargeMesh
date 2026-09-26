@@ -1,4 +1,4 @@
-# @chargemesh/web
+# @chargemesh/frontend
 
 ChargeMesh'in Host ve Driver arayüzü. Host bu ekranlardan şarj noktasını tanımlar ve boş saatlerini yayınlar. Driver ise talebini girer, uygun noktayı rezerve eder, QR ile şarjı başlatır ve oturum bitince Proof of Charge özetini görür.
 
@@ -10,7 +10,7 @@ Next.js 16 (App Router), React 19, Tailwind CSS 4, wagmi 3 ve viem 2 (cüzdan ve
 
 ```powershell
 Copy-Item .env.example .env.local
-corepack pnpm --filter @chargemesh/web dev
+corepack pnpm --filter @chargemesh/frontend dev
 ```
 
 Uygulama `http://localhost:3000` adresinde açılır.
@@ -69,10 +69,10 @@ src/
 
 | Komut | Ne yapar |
 | --- | --- |
-| `corepack pnpm --filter @chargemesh/web dev` | Geliştirme sunucusu |
-| `corepack pnpm --filter @chargemesh/web build` | Üretim derlemesi |
-| `corepack pnpm --filter @chargemesh/web typecheck` | Tip kontrolü |
-| `corepack pnpm --filter @chargemesh/web lint` | ESLint |
-| `corepack pnpm --filter @chargemesh/web test` | Vitest |
+| `corepack pnpm --filter @chargemesh/frontend dev` | Geliştirme sunucusu |
+| `corepack pnpm --filter @chargemesh/frontend build` | Üretim derlemesi |
+| `corepack pnpm --filter @chargemesh/frontend typecheck` | Tip kontrolü |
+| `corepack pnpm --filter @chargemesh/frontend lint` | ESLint |
+| `corepack pnpm --filter @chargemesh/frontend test` | Vitest |
 
 Bu klasörde çalışacak ajanlar ve geliştiriciler için kurallar [AGENTS.md](AGENTS.md) dosyasındadır.

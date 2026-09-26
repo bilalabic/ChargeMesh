@@ -47,7 +47,7 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
   const deployment = getDeployment(opts.chainId);
   if (!deployment) {
     throw new Error(
-      `No ChargeMeshEscrow deployment for chainId ${opts.chainId} (packages/shared/src/chain/deployments.ts)`,
+      `No ChargeMeshEscrow deployment for chainId ${opts.chainId} (shared/src/chain/deployments.ts)`,
     );
   }
   const escrow = deployment.escrow;

@@ -40,4 +40,4 @@ Paket derlenmez; `exports` doğrudan TypeScript kaynaklarını gösterir. Next.j
 
 ## Değişiklik kuralları
 
-Bu paketteki bir değişiklik diğer ekiplerin kodunu doğrudan etkiler. Bu yüzden değişiklikler [sözleşme değişikliği protokolü](../../docs/07-paralel-calisma.md#sözleşme-değişikliği-protokolü) ile yapılır ve [değişiklik günlüğüne](../../docs/degisiklik-gunlugu.md) işlenir. Dosya bazında sahiplik için [AGENTS.md](AGENTS.md) dosyasına bakın.
+Bu paketteki bir değişiklik diğer ekiplerin kodunu doğrudan etkiler. Bu yüzden değişiklikler [sözleşme değişikliği protokolü](../docs/07-paralel-calisma.md#sözleşme-değişikliği-protokolü) ile yapılır ve [değişiklik günlüğüne](../docs/degisiklik-gunlugu.md) işlenir. Dosya bazında sahiplik için [AGENTS.md](AGENTS.md) dosyasına bakın.

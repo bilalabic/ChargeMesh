@@ -43,7 +43,7 @@ wsl.exe -d Ubuntu-24.04 -- bash -lc "cd /mnt/c/Users/bilal/projects/ChargeMesh/c
 
 Sözleşme, backend ve frontend aynı tanımları kullanmak zorundadır. Bunu iki mekanizma garanti eder:
 
-1. **ABI ve adresler üretilir.** `forge build` sonrasında Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `packages/shared/src/chain/abi.ts` ve `deployments.ts` dosyalarını yeniden üretir. Bu dosyalar elle düzenlenmez.
+1. **ABI ve adresler üretilir.** `forge build` sonrasında Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `shared/src/chain/abi.ts` ve `deployments.ts` dosyalarını yeniden üretir. Bu dosyalar elle düzenlenmez.
 2. **EIP-712 uyum testi.** `test/fixtures/quote-signature.json`, TypeScript tarafında (`corepack pnpm --filter @chargemesh/shared fixture:quote`) imzalanmış bir tekliftir. `test/Eip712Compat.t.sol` bu imzayı sözleşmede doğrular. İki taraftan birinde tip tanımı değişirse bu test kırılır.
 
 ## Yerel zincirde deploy (Anvil)

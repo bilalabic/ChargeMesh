@@ -10,15 +10,15 @@ ChargeMesh, atıl AC şarj cihazlarının kapasitesini, sürücünün gideceği 
 
 | Alan | Klasör | Oku |
 | --- | --- | --- |
-| Frontend | `apps/web` | `docs/03-api.md`, `docs/04-akilli-sozlesme.md` (EIP-712 ve hatalar) |
-| Backend | `apps/api`, `apps/charger-sim` | `docs/02-mimari.md`, `docs/03-api.md`, `docs/05-ocpp.md` |
+| Frontend | `frontend` | `docs/03-<frontend|api|charger-sim|shared>.md`, `docs/04-akilli-sozlesme.md` (EIP-712 ve hatalar) |
+| Backend | `backend/<frontend|api|charger-sim|shared>`, `backend/charger-sim` | `docs/02-mimari.md`, `docs/03-api.md`, `docs/05-ocpp.md` |
 | Blockchain | `contracts` | `docs/04-akilli-sozlesme.md` |
 | Entegrasyon | hepsi | `docs/06-demo-senaryosu.md`, `docs/07-paralel-calisma.md` |
 
 ## Değişmez kurallar
 
 1. **Kendi alanında kal.** Yalnızca görevlendirildiğin klasörü değiştir (sahiplik tablosu: `docs/07-paralel-calisma.md`). Başka ekibin koduna ihtiyaç duyarsan kodu değil, sözleşmesini (şema, ABI, belge) kullan.
-2. **Sözleşmeler donmuştur.** `packages/shared/src/**`, `contracts/src/interfaces/**` ve `docs/03-05` dosyalarında değişiklik gerekiyorsa dur. Gerekçeyi yaz ve "sözleşme değişikliği protokolü"nü uygula (`docs/07-paralel-calisma.md`). Sessizce değiştirme; kendi tarafında geçici tip veya kopya da oluşturma.
+2. **Sözleşmeler donmuştur.** `shared/src/**`, `contracts/src/interfaces/**` ve `docs/03-05` dosyalarında değişiklik gerekiyorsa dur. Gerekçeyi yaz ve "sözleşme değişikliği protokolü"nü uygula (`docs/07-paralel-calisma.md`). Sessizce değiştirme; kendi tarafında geçici tip veya kopya da oluşturma.
 3. **Kendi versiyonunu yazma.** Kimlik dönüşümü (`ids.ts`), ücret hesabı (`units.ts`), Proof of Charge hash'i (`proof.ts`), eşleştirme (`matching.ts`), EIP-712 (`chain/eip712.ts`) ve ABI/adresler (`chain/`) yalnızca `@chargemesh/shared` paketinden alınır.
 4. **Birimler:** Enerji tam sayı Wh, para wei (API'de ondalık string, kodda `bigint`), zaman ISO 8601 UTC (zincirde Unix saniyesi). `number` ile para hesabı yapılmaz.
 5. **Gizli bilgi yok:** `.env`, özel anahtar ve seed phrase asla okunmaz, yazdırılmaz ve commit edilmez. Yeni değişken eklenirse `.env.example` güncellenir. Yalnızca testnet ve yerel ağ kullanılır.
@@ -41,7 +41,7 @@ ChargeMesh, atıl AC şarj cihazlarının kapasitesini, sürücünün gideceği 
 | Tip kontrolü | `corepack pnpm typecheck` |
 | Lint | `corepack pnpm lint` |
 | Test | `corepack pnpm test` |
-| Tek paket | `corepack pnpm --filter @chargemesh/<web\|api\|charger-sim\|shared> <script>` |
+| Tek paket | `corepack pnpm --filter @chargemesh/<frontend|api|charger-sim|shared>\|api\|charger-sim\|shared> <script>` |
 | ABI ve adresleri güncelle | `corepack pnpm --filter @chargemesh/shared chain:sync` (önce `forge build`) |
 
 ## İş bitirme tanımı
@@ -50,7 +50,7 @@ Bir işi "bitti" saymadan önce:
 
 1. Kendi paketinde `typecheck`, `lint` ve `test` (contracts için `forge build` + `forge test`) çalıştır. Sonucu olduğu gibi raporla; geçmeyen bir adımı geçti diye yazma.
 2. `git diff` ile değişikliği gözden geçir. Alan dışı dosya değişmemiş olmalı.
-3. Commit mesajı **İngilizce** ve Conventional Commits biçiminde olmalı: `feat(web): …`, `fix(api): …`, `test(contracts): …`, `docs: …`.
+3. Commit mesajı **İngilizce** ve Conventional Commits biçiminde olmalı: `feat(frontend): …`, `fix(backend): …`, `test(contracts): …`, `docs: …`.
 4. Push, PR, deploy ve zincire işlem gönderme gibi adımları kullanıcı onayı olmadan yapma.
 
 ## Dil

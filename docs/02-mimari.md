@@ -7,17 +7,17 @@
 ```mermaid
 flowchart LR
   subgraph Browser["Tarayıcı"]
-    WEB["apps/web<br/>Next.js + wagmi"]
+    WEB["frontend<br/>Next.js + wagmi"]
     WALLET["Cüzdan<br/>(MetaMask vb.)"]
   end
 
   subgraph Server["Uygulama sunucusu"]
-    API["apps/api<br/>Fastify REST + SSE"]
-    CS["OCPP Central System<br/>(apps/api içinde, :9000)"]
+    API["backend/api<br/>Fastify REST + SSE"]
+    CS["OCPP Central System<br/>(backend/api içinde, :9000)"]
     DB[("PostgreSQL<br/>:5433")]
   end
 
-  SIM["apps/charger-sim<br/>OCPP 1.6J simülatörü"]
+  SIM["backend/charger-sim<br/>OCPP 1.6J simülatörü"]
   CHAIN[("Monad testnet<br/>ChargeMeshEscrow")]
 
   WEB -- "REST /api/v1, SSE" --> API
@@ -33,11 +33,11 @@ flowchart LR
 
 | Klasör | Bileşen | Sahip ekip | Teknoloji |
 | --- | --- | --- | --- |
-| `apps/web` | Host ve Driver arayüzü | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, wagmi 3, viem 2, TanStack Query 5 |
-| `apps/api` | REST API, eşleştirme, OCPP Central System, zincir istemcisi | Backend | Node.js 22+, Fastify 5, Drizzle ORM, PostgreSQL 17, viem 2, ocpp-rpc |
-| `apps/charger-sim` | OCPP 1.6J şarj cihazı simülatörü (CLI) | Backend | Node.js, ocpp-rpc |
+| `frontend` | Host ve Driver arayüzü | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, wagmi 3, viem 2, TanStack Query 5 |
+| `backend/api` | REST API, eşleştirme, OCPP Central System, zincir istemcisi | Backend | Node.js 22+, Fastify 5, Drizzle ORM, PostgreSQL 17, viem 2, ocpp-rpc |
+| `backend/charger-sim` | OCPP 1.6J şarj cihazı simülatörü (CLI) | Backend | Node.js, ocpp-rpc |
 | `contracts` | `ChargeMeshEscrow` akıllı sözleşmesi | Blockchain | Solidity 0.8.x, Foundry, OpenZeppelin Contracts 5 |
-| `packages/shared` | API şemaları, tipler, birim yardımcıları, EIP-712 tanımı, Proof of Charge hash'i, ABI ve deploy adresleri | Ortak (kurallar aşağıda) | TypeScript, zod 4, viem |
+| `shared` | API şemaları, tipler, birim yardımcıları, EIP-712 tanımı, Proof of Charge hash'i, ABI ve deploy adresleri | Ortak (kurallar aşağıda) | TypeScript, zod 4, viem |
 | `docs` | Spesifikasyon | Entegrasyon sorumlusu | Markdown |
 
 Foundry, Windows'ta değil WSL (Ubuntu 24.04) içinde çalışır. Diğer tüm araçlar Windows'ta doğrudan çalışır.
@@ -66,7 +66,7 @@ Kaynak: [docs.monad.xyz](https://docs.monad.xyz/developer-essentials/testnet) (E
 | Faucet | `https://faucet.monad.xyz` |
 | Doğrulama (Sourcify) | `--verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/` |
 
-> Testnet 2025-12-16'da genesis'ten sıfırlandı. Eski sözleşme adresleri geçersizdir; adres yalnızca `packages/shared/src/chain/deployments.ts` dosyasından okunur.
+> Testnet 2025-12-16'da genesis'ten sıfırlandı. Eski sözleşme adresleri geçersizdir; adres yalnızca `shared/src/chain/deployments.ts` dosyasından okunur.
 
 ## Çalışma modları
 
@@ -74,10 +74,10 @@ Ekiplerin birbirini beklemeden çalışabilmesi için her bileşenin bağımsız
 
 | Değişken | Değerler | Etki |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_MODE` (web) | `mock` · `live` | `mock` modunda web, `packages/shared` içindeki fixture'larla çalışır ve API'ye ihtiyaç duymaz. |
-| `CHAIN_MODE` (api) | `mock` · `anvil` · `monad` | `mock` modunda zincir çağrıları yapılmaz, sahte tx hash'leri üretilir ve `confirm` her geçerli hash'i kabul eder. `anvil` yerel zinciri, `monad` testnet'i kullanır. |
-| `chainMode: "mock"` (web + api birlikte) | – | Web `live` modda çalışırken `GET /config` yanıtı `chainMode: "mock"` ise cüzdan açılmaz ve `reserve()` gönderilmez. Web, `0x` + 64 hex karakterlik sahte bir tx hash'iyle doğrudan `confirm` çağırır. Böylece web ve API zincir olmadan birlikte test edilebilir. Mock modda API `chainId` olarak `31337` bildirir. |
-| `DEMO_ALLOW_ANY_TIME` (api) | `true` · `false` | `true` olduğunda oturum başlatmada zaman penceresi kontrolü atlanır. Canlı demoda saat uyumsuzluğu yaşanmasın diye vardır. Zincirdeki `endTime` kontrolü yine geçerlidir. |
+| `NEXT_PUBLIC_API_MODE` (frontend) | `mock` · `live` | `mock` modunda frontend, `shared` içindeki fixture'larla çalışır ve API'ye ihtiyaç duymaz. |
+| `CHAIN_MODE` (backend) | `mock` · `anvil` · `monad` | `mock` modunda zincir çağrıları yapılmaz, sahte tx hash'leri üretilir ve `confirm` her geçerli hash'i kabul eder. `anvil` yerel zinciri, `monad` testnet'i kullanır. |
+| `chainMode: "mock"` (frontend + backend birlikte) | – | Frontend `live` modda çalışırken `GET /config` yanıtı `chainMode: "mock"` ise cüzdan açılmaz ve `reserve()` gönderilmez. Frontend, `0x` + 64 hex karakterlik sahte bir tx hash'iyle doğrudan `confirm` çağırır. Böylece frontend ve backend zincir olmadan birlikte test edilebilir. Mock modda API `chainId` olarak `31337` bildirir. |
+| `DEMO_ALLOW_ANY_TIME` (backend) | `true` · `false` | `true` olduğunda oturum başlatmada zaman penceresi kontrolü atlanır. Canlı demoda saat uyumsuzluğu yaşanmasın diye vardır. Zincirdeki `endTime` kontrolü yine geçerlidir. |
 
 ## Uçtan uca sıra diyagramı
 
@@ -157,18 +157,18 @@ Her uygulamanın klasöründe bir `.env.example` bulunur. Gerçek `.env` dosyala
 
 | Uygulama | Değişken | Örnek | Açıklama |
 | --- | --- | --- | --- |
-| web | `NEXT_PUBLIC_API_URL` | `http://localhost:4000/api/v1` | |
-| web | `NEXT_PUBLIC_API_MODE` | `mock` | `mock` veya `live` |
-| web | `NEXT_PUBLIC_CHAIN_ID` | `10143` | `31337` (anvil) veya `10143` |
-| api | `PORT` | `4000` | |
-| api | `OCPP_PORT` | `9000` | |
-| api | `DATABASE_URL` | `postgres://chargemesh:chargemesh@localhost:5433/chargemesh` | |
-| api | `WEB_BASE_URL` | `http://localhost:3000` | QR içindeki başlatma adresi |
-| api | `CHAIN_MODE` | `mock` | `mock`, `anvil` veya `monad` |
-| api | `RPC_URL` | `https://testnet-rpc.monad.xyz` | |
-| api | `SETTLER_PRIVATE_KEY` | *(yalnızca testnet anahtarı)* | Teklif imzalar ve `startSession`/`settle` gönderir |
-| api | `QUOTE_TTL_SECONDS` | `300` | |
-| api | `DEMO_ALLOW_ANY_TIME` | `true` | |
+| frontend | `NEXT_PUBLIC_API_URL` | `http://localhost:4000/api/v1` | |
+| frontend | `NEXT_PUBLIC_API_MODE` | `mock` | `mock` veya `live` |
+| frontend | `NEXT_PUBLIC_CHAIN_ID` | `10143` | `31337` (anvil) veya `10143` |
+| backend | `PORT` | `4000` | |
+| backend | `OCPP_PORT` | `9000` | |
+| backend | `DATABASE_URL` | `postgres://chargemesh:chargemesh@localhost:5433/chargemesh` | |
+| backend | `WEB_BASE_URL` | `http://localhost:3000` | QR içindeki başlatma adresi |
+| backend | `CHAIN_MODE` | `mock` | `mock`, `anvil` veya `monad` |
+| backend | `RPC_URL` | `https://testnet-rpc.monad.xyz` | |
+| backend | `SETTLER_PRIVATE_KEY` | *(yalnızca testnet anahtarı)* | Teklif imzalar ve `startSession`/`settle` gönderir |
+| backend | `QUOTE_TTL_SECONDS` | `300` | |
+| backend | `DEMO_ALLOW_ANY_TIME` | `true` | |
 | charger-sim | `CS_URL` | `ws://localhost:9000/ocpp` | |
 | charger-sim | `CHARGE_POINT_ID` | `CM-DEMO-001` | |
 | charger-sim | `POWER_KW` | `7.4` | |
@@ -177,4 +177,4 @@ Her uygulamanın klasöründe bir `.env.example` bulunur. Gerçek `.env` dosyala
 | charger-sim | `VEHICLE_ACCEPT_WH` | *(boş)* | Doluysa araç bu kadar enerji aldıktan sonra kendiliğinden ayrılır |
 | contracts | `RPC_URL`, `DEPLOYER_PRIVATE_KEY`, `SETTLER_ADDRESS` | | Yalnızca deploy betiği için |
 
-Sözleşme adresi ortam değişkeninden değil, `packages/shared/src/chain/deployments.ts` dosyasından okunur. Böylece üç bileşen de her zaman aynı adresi kullanır.
+Sözleşme adresi ortam değişkeninden değil, `shared/src/chain/deployments.ts` dosyasından okunur. Böylece üç bileşen de her zaman aynı adresi kullanır.
