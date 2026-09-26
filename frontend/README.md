@@ -11,6 +11,15 @@ corepack pnpm --filter @chargemesh/frontend dev
 
 Uygulama `http://localhost:3000` adresinde açılır. Varsayılan `VITE_API_MODE=mock` değeridir.
 
+MetaMask yalnızca `live` modda açılır. `frontend/.env.local` içinde
+`VITE_API_MODE=live` ve hedefe uygun `VITE_API_URL` ayarlandıktan sonra üst
+menüdeki **MetaMask'a bağlan** düğmesi hesabı bağlar. Cüzdan farklı bir ağdaysa
+uygulama Monad testnet'i eklemeyi veya bu ağa geçmeyi ister. Özel anahtar ve seed
+phrase frontend env değişkenlerine hiçbir zaman yazılmaz.
+
+Production ve Vercel dahil bütün ortam değişkenleri için
+[deploy ve env rehberine](../docs/09-deploy-ve-env.md) bakın.
+
 ## Kontroller
 
 ```powershell
