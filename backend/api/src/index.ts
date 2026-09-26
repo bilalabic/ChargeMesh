@@ -1,11 +1,11 @@
 /**
  * Entry point: HTTP API (:PORT) + OCPP Central System (:OCPP_PORT).
- * The DB pool is created lazily, so startup does not need PostgreSQL.
+ * Atlas is connected and its indexes are verified before HTTP/OCPP start listening.
  */
 import { buildApp } from "./app";
 import { createChainGateway } from "./chain";
 import { ConfigError, loadConfig, type AppConfigEnv } from "./config";
-import { createDbHandle } from "./db/client";
+import { MongoStore } from "./db/mongo";
 import { ChargerRegistry, OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
 
@@ -30,11 +30,14 @@ async function main(): Promise<void> {
   }
 
   const chain = createChainGateway(config);
-  const db = createDbHandle(config.databaseUrl);
+  if (!config.mongoUri) throw new ConfigError("MONGODB_URI is required");
+  const store = new MongoStore(config.mongoUri, config.mongoDbName);
+  await store.connect();
+  await store.ensureIndexes();
   const chargers = new ChargerRegistry();
   const events = new SessionEventBus();
 
-  const app = await buildApp({ config, chain, chargers, events, db, logger: loggerOptions(config) });
+  const app = await buildApp({ config, chain, chargers, events, store, logger: loggerOptions(config) });
   const ocpp = new OcppCentralSystem({
     port: config.ocppPort,
     registry: chargers,
@@ -57,7 +60,7 @@ async function main(): Promise<void> {
     try {
       await ocpp.stop();
       await app.close();
-      await db.close();
+      await store.close();
       process.exit(0);
     } catch (err) {
       app.log.error({ err }, "Error during shutdown");

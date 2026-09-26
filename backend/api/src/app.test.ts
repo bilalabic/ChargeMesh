@@ -88,12 +88,13 @@ describe("error format", () => {
 
 describe("config", () => {
   it("defaults to CHAIN_MODE=mock", () => {
-    expect(loadConfig({}).chainMode).toBe("mock");
+    expect(loadConfig({ NODE_ENV: "test" }).chainMode).toBe("mock");
   });
 
   it("fails fast on invalid values", () => {
     expect(() => loadConfig({ PORT: "not-a-port" })).toThrow(/PORT/);
     expect(() => loadConfig({ CHAIN_MODE: "mainnet" })).toThrow(/CHAIN_MODE/);
     expect(() => loadConfig({ CHAIN_MODE: "monad" })).toThrow(/SETTLER_PRIVATE_KEY/);
+    expect(() => loadConfig({ NODE_ENV: "development" })).toThrow(/MONGODB_URI/);
   });
 });

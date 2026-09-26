@@ -6,7 +6,8 @@ import { API_PREFIX, WALLET_HEADER } from "@chargemesh/shared";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { ChainGateway } from "./chain";
 import type { AppConfigEnv } from "./config";
-import type { DbHandle } from "./db/client";
+import { MemoryStore } from "./db/memory";
+import type { Store } from "./db/store";
 import { registerAuth } from "./http/auth";
 import { registerErrorHandling } from "./http/errors";
 import { demoRoutes } from "./http/routes/demo";
@@ -26,7 +27,7 @@ export interface AppDeps {
   chargers?: ChargerRegistry;
   events?: SessionEventBus;
   ocpp?: OcppCentralSystem | null;
-  db?: DbHandle | null;
+  store?: Store;
   /** Fastify logger option; defaults to off (tests). */
   logger?: FastifyServerOptions["logger"];
 }
@@ -38,7 +39,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     chargers: deps.chargers ?? deps.ocpp?.registry ?? new ChargerRegistry(),
     events: deps.events ?? new SessionEventBus(),
     ocpp: deps.ocpp ?? null,
-    db: deps.db ?? null,
+    store: deps.store ?? new MemoryStore(),
   };
 
   const app = Fastify({ logger: deps.logger ?? false });
