@@ -1,13 +1,15 @@
 /**
  * Entry point: HTTP API (:PORT) + OCPP Central System (:OCPP_PORT).
- * The DB pool is created lazily, so startup does not need PostgreSQL.
+ * Atlas is connected and its indexes are verified before HTTP/OCPP start listening.
  */
 import { buildApp } from "./app";
 import { createChainGateway } from "./chain";
 import { ConfigError, loadConfig, type AppConfigEnv } from "./config";
-import { createDbHandle } from "./db/client";
+import { MongoStore } from "./db/mongo";
 import { ChargerRegistry, OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
+import { ReconciliationWorker } from "./sessions/reconciliation";
+import { ChargingSessionService } from "./sessions/service";
 
 function loggerOptions(config: AppConfigEnv) {
   if (config.nodeEnv === "production") return { level: "info" };
@@ -30,22 +32,38 @@ async function main(): Promise<void> {
   }
 
   const chain = createChainGateway(config);
-  const db = createDbHandle(config.databaseUrl);
+  if (!config.mongoUri) throw new ConfigError("MONGODB_URI is required");
+  const store = new MongoStore(config.mongoUri, config.mongoDbName);
+  await store.connect();
+  await store.ensureIndexes();
   const chargers = new ChargerRegistry();
   const events = new SessionEventBus();
-
-  const app = await buildApp({ config, chain, chargers, events, db, logger: loggerOptions(config) });
+  const sessions = new ChargingSessionService(store, chain, events, config);
   const ocpp = new OcppCentralSystem({
     port: config.ocppPort,
     registry: chargers,
-    logger: app.log.child({ component: "ocpp" }),
+    store,
+    sessions,
   });
+  sessions.setCommands(ocpp);
+  const app = await buildApp({ config, chain, chargers, events, sessions, ocpp, store, logger: loggerOptions(config) });
+  ocpp.setLogger(app.log.child({ component: "ocpp" }));
+  const reconciliation = new ReconciliationWorker(
+    store,
+    chain,
+    sessions,
+    events,
+    config.reconciliationIntervalMs,
+    app.log.child({ component: "reconciliation" }),
+  );
 
   // Never log the key; only the derived settler address.
   app.log.info(
     { chainMode: config.chainMode, chainId: config.chainId, settler: chain.settlerAddress, contract: chain.contractAddress },
     "Chain gateway ready",
   );
+  await reconciliation.runOnce();
+  reconciliation.start();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -55,9 +73,10 @@ async function main(): Promise<void> {
     const force = setTimeout(() => process.exit(1), 10_000);
     force.unref();
     try {
+      reconciliation.stop();
       await ocpp.stop();
       await app.close();
-      await db.close();
+      await store.close();
       process.exit(0);
     } catch (err) {
       app.log.error({ err }, "Error during shutdown");

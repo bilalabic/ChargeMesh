@@ -2,7 +2,7 @@ import { API_PREFIX, ApiError, AppConfig, HealthResponse } from "@chargemesh/sha
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app";
-import { createMockChainGateway } from "./chain";
+import { createChainGateway, createMockChainGateway } from "./chain";
 import { loadConfig } from "./config";
 import { ChargerRegistry } from "./ocpp/server";
 
@@ -66,12 +66,10 @@ describe("error format", () => {
     expect(body.error.details).toBeNull();
   });
 
-  it("M1 stub -> 501 INTERNAL 'Not implemented (M1)'", async () => {
+  it("protected route without wallet -> 401 UNAUTHORIZED", async () => {
     const res = await app.inject({ method: "POST", url: `${API_PREFIX}/intents`, payload: {} });
-    expect(res.statusCode).toBe(501);
-    expect(res.json()).toEqual({
-      error: { code: "INTERNAL", message: "Not implemented (M1)", details: null },
-    });
+    expect(res.statusCode).toBe(401);
+    expect(ApiError.parse(res.json()).error.code).toBe("UNAUTHORIZED");
   });
 
   it("malformed JSON -> 400 VALIDATION_ERROR", async () => {
@@ -88,12 +86,25 @@ describe("error format", () => {
 
 describe("config", () => {
   it("defaults to CHAIN_MODE=mock", () => {
-    expect(loadConfig({}).chainMode).toBe("mock");
+    expect(loadConfig({ NODE_ENV: "test" }).chainMode).toBe("mock");
   });
 
   it("fails fast on invalid values", () => {
     expect(() => loadConfig({ PORT: "not-a-port" })).toThrow(/PORT/);
     expect(() => loadConfig({ CHAIN_MODE: "mainnet" })).toThrow(/CHAIN_MODE/);
     expect(() => loadConfig({ CHAIN_MODE: "monad" })).toThrow(/SETTLER_PRIVATE_KEY/);
+    expect(() => loadConfig({ NODE_ENV: "development" })).toThrow(/MONGODB_URI/);
+  });
+
+  it("validates Monad live-mode config without sending a transaction", () => {
+    const live = loadConfig({
+      NODE_ENV: "test",
+      CHAIN_MODE: "monad",
+      SETTLER_PRIVATE_KEY: `0x${"11".repeat(32)}`,
+    });
+    const gateway = createChainGateway(live);
+    expect(live.chainId).toBe(10143);
+    expect(gateway.mode).toBe("monad");
+    expect(gateway.contractAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 });

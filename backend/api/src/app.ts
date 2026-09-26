@@ -6,7 +6,8 @@ import { API_PREFIX, WALLET_HEADER } from "@chargemesh/shared";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { ChainGateway } from "./chain";
 import type { AppConfigEnv } from "./config";
-import type { DbHandle } from "./db/client";
+import { MemoryStore } from "./db/memory";
+import type { Store } from "./db/store";
 import { registerAuth } from "./http/auth";
 import { registerErrorHandling } from "./http/errors";
 import { demoRoutes } from "./http/routes/demo";
@@ -19,26 +20,32 @@ import { slotRoutes } from "./http/routes/slots";
 import { healthPayload, systemRoutes } from "./http/routes/system";
 import { ChargerRegistry, type OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
+import { ChargingSessionService } from "./sessions/service";
 
 export interface AppDeps {
   config: AppConfigEnv;
   chain: ChainGateway;
   chargers?: ChargerRegistry;
   events?: SessionEventBus;
+  sessions?: ChargingSessionService;
   ocpp?: OcppCentralSystem | null;
-  db?: DbHandle | null;
+  store?: Store;
   /** Fastify logger option; defaults to off (tests). */
   logger?: FastifyServerOptions["logger"];
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const store = deps.store ?? new MemoryStore();
+  const events = deps.events ?? new SessionEventBus();
+  const sessions = deps.sessions ?? deps.ocpp?.sessions ?? new ChargingSessionService(store, deps.chain, events, deps.config);
   const routeDeps: RouteDeps = {
     config: deps.config,
     chain: deps.chain,
     chargers: deps.chargers ?? deps.ocpp?.registry ?? new ChargerRegistry(),
-    events: deps.events ?? new SessionEventBus(),
+    events,
+    sessions,
     ocpp: deps.ocpp ?? null,
-    db: deps.db ?? null,
+    store,
   };
 
   const app = Fastify({ logger: deps.logger ?? false });

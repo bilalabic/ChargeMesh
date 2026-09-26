@@ -59,7 +59,7 @@ Aşağıdaki terimler kodda, arayüzde ve dokümanlarda **aynen** kullanılır. 
 
 | Nerede | Ne tutulur |
 | --- | --- |
-| **Uygulama sunucusu (PostgreSQL)** | Node ve slot ayrıntıları, açık adres ve konum, eşleştirme, erişim talimatları, OCPP mesajları, ham sayaç kayıtları, oturum özeti (kanonik JSON). |
+| **Uygulama sunucusu (MongoDB Atlas)** | Node ve slot ayrıntıları, açık adres ve konum, eşleştirme, erişim talimatları, OCPP mesajları, ham sayaç kayıtları, oturum özeti (kanonik JSON). |
 | **Monad testnet** | Rezervasyon taahhüdü (slot referansı, taraflar, istenen Wh, fiyat, zaman penceresi), depozito kilidi, oturumun başlaması, oturum sonucu (aktarılan Wh), hesaplaşma tutarları ve oturum özetinin hash'i. |
 
 Gizlilik kuralları:

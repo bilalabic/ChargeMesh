@@ -17,10 +17,10 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: Port.default(4000),
   OCPP_PORT: Port.default(9000),
-  DATABASE_URL: z
-    .string()
-    .regex(/^postgres(ql)?:\/\//, "DATABASE_URL must be a postgres:// URL")
-    .default("postgres://chargemesh:chargemesh@localhost:5433/chargemesh"),
+  MONGODB_URI: optionalString(
+    z.string().regex(/^mongodb(\+srv)?:\/\//, "MONGODB_URI must be a mongodb:// or mongodb+srv:// URI"),
+  ),
+  MONGODB_DB_NAME: z.string().trim().regex(/^[A-Za-z0-9_-]{1,63}$/).default("chargemesh"),
   WEB_BASE_URL: z.url().default("http://localhost:3000"),
   CHAIN_MODE: ChainMode.default("mock"),
   RPC_URL: optionalString(z.url()),
@@ -28,6 +28,7 @@ const EnvSchema = z.object({
     z.string().regex(/^0x[0-9a-fA-F]{64}$/, "SETTLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex"),
   ),
   QUOTE_TTL_SECONDS: z.coerce.number().int().min(30).max(3_600).default(300),
+  RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   DEMO_ALLOW_ANY_TIME: optionalString(BooleanFlag),
 });
 
@@ -35,13 +36,15 @@ export interface AppConfigEnv {
   nodeEnv: "development" | "test" | "production";
   port: number;
   ocppPort: number;
-  databaseUrl: string;
+  mongoUri: string | null;
+  mongoDbName: string;
   webBaseUrl: string;
   chainMode: ChainMode;
   chainId: number;
   rpcUrl: string | null;
   settlerPrivateKey: `0x${string}` | null;
   quoteTtlSeconds: number;
+  reconciliationIntervalMs: number;
   demoAllowAnyTime: boolean;
 }
 
@@ -69,6 +72,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
     throw new ConfigError(`SETTLER_PRIVATE_KEY is required when CHAIN_MODE=${e.CHAIN_MODE}`);
   }
 
+  if (e.NODE_ENV !== "test" && !e.MONGODB_URI) {
+    throw new ConfigError("MONGODB_URI is required unless NODE_ENV=test");
+  }
+
   const defaultRpc =
     e.CHAIN_MODE === "monad"
       ? monadTestnet.rpcUrls.default.http[0]
@@ -80,13 +87,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
     nodeEnv: e.NODE_ENV,
     port: e.PORT,
     ocppPort: e.OCPP_PORT,
-    databaseUrl: e.DATABASE_URL,
+    mongoUri: e.MONGODB_URI ?? null,
+    mongoDbName: e.MONGODB_DB_NAME,
     webBaseUrl: e.WEB_BASE_URL.replace(/\/+$/, ""),
     chainMode: e.CHAIN_MODE,
     chainId: chainIdFor(e.CHAIN_MODE),
     rpcUrl: e.RPC_URL ?? defaultRpc ?? null,
     settlerPrivateKey: (e.SETTLER_PRIVATE_KEY as `0x${string}` | undefined) ?? null,
     quoteTtlSeconds: e.QUOTE_TTL_SECONDS,
+    reconciliationIntervalMs: e.RECONCILIATION_INTERVAL_MS,
     // Local dev defaults to true (avoids clock skew during demos); production defaults to false.
     demoAllowAnyTime: e.DEMO_ALLOW_ANY_TIME ?? e.NODE_ENV !== "production",
   };

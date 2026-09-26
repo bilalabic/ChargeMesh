@@ -14,7 +14,7 @@ flowchart LR
   subgraph Server["Uygulama sunucusu"]
     API["backend/api<br/>Fastify REST + SSE"]
     CS["OCPP Central System<br/>(backend/api içinde, :9000)"]
-    DB[("PostgreSQL<br/>:5433")]
+    DB[("MongoDB Atlas")]
   end
 
   SIM["backend/charger-sim<br/>OCPP 1.6J simülatörü"]
@@ -34,7 +34,7 @@ flowchart LR
 | Klasör | Bileşen | Sahip ekip | Teknoloji |
 | --- | --- | --- | --- |
 | `frontend` | Host ve Driver arayüzü | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, wagmi 3, viem 2, TanStack Query 5 |
-| `backend/api` | REST API, eşleştirme, OCPP Central System, zincir istemcisi | Backend | Node.js 22+, Fastify 5, Drizzle ORM, PostgreSQL 17, viem 2, ocpp-rpc |
+| `backend/api` | REST API, eşleştirme, OCPP Central System, zincir istemcisi | Backend | Node.js 22+, Fastify 5, MongoDB Atlas, resmi MongoDB Node.js driver, viem 2, ocpp-rpc |
 | `backend/charger-sim` | OCPP 1.6J şarj cihazı simülatörü (CLI) | Backend | Node.js, ocpp-rpc |
 | `contracts` | `ChargeMeshEscrow` akıllı sözleşmesi | Blockchain | Solidity 0.8.x, Foundry, OpenZeppelin Contracts 5 |
 | `shared` | API şemaları, tipler, birim yardımcıları, EIP-712 tanımı, Proof of Charge hash'i, ABI ve deploy adresleri | Ortak (kurallar aşağıda) | TypeScript, zod 4, viem |
@@ -50,7 +50,7 @@ Foundry, Windows'ta değil WSL (Ubuntu 24.04) içinde çalışır. Diğer tüm a
 | REST API | `http://localhost:4000/api/v1` |
 | API sağlık kontrolü | `http://localhost:4000/health` |
 | OCPP Central System | `ws://localhost:9000/ocpp/{chargePointId}` |
-| PostgreSQL (Docker) | `localhost:5433` (kullanıcı, parola ve veritabanı: `chargemesh`) |
+| MongoDB Atlas | `MONGODB_URI` ile bağlanır; varsayılan veritabanı adı `chargemesh` |
 | Anvil (yerel zincir, WSL) | `http://localhost:8545`, chainId `31337` |
 
 ## Ağ bilgileri (Monad testnet)
@@ -162,12 +162,14 @@ Her uygulamanın klasöründe bir `.env.example` bulunur. Gerçek `.env` dosyala
 | frontend | `NEXT_PUBLIC_CHAIN_ID` | `10143` | `31337` (anvil) veya `10143` |
 | backend | `PORT` | `4000` | |
 | backend | `OCPP_PORT` | `9000` | |
-| backend | `DATABASE_URL` | `postgres://chargemesh:chargemesh@localhost:5433/chargemesh` | |
+| backend | `MONGODB_URI` | `mongodb+srv://<user>:<password>@<cluster>/` | Gizlidir; loglanmaz ve commit edilmez |
+| backend | `MONGODB_DB_NAME` | `chargemesh` | Uygulama veritabanı adı |
 | backend | `WEB_BASE_URL` | `http://localhost:3000` | QR içindeki başlatma adresi |
 | backend | `CHAIN_MODE` | `mock` | `mock`, `anvil` veya `monad` |
 | backend | `RPC_URL` | `https://testnet-rpc.monad.xyz` | |
 | backend | `SETTLER_PRIVATE_KEY` | *(yalnızca testnet anahtarı)* | Teklif imzalar ve `startSession`/`settle` gönderir |
 | backend | `QUOTE_TTL_SECONDS` | `300` | |
+| backend | `RECONCILIATION_INTERVAL_MS` | `30000` | Yarım kalan start/settlement işlemlerini başlangıçta ve bu aralıkla uzlaştırır. |
 | backend | `DEMO_ALLOW_ANY_TIME` | `true` | |
 | charger-sim | `CS_URL` | `ws://localhost:9000/ocpp` | |
 | charger-sim | `CHARGE_POINT_ID` | `CM-DEMO-001` | |
