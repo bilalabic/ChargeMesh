@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {ChargeMeshEscrow} from "../src/ChargeMeshEscrow.sol";
 import {IChargeMeshEscrow} from "../src/interfaces/IChargeMeshEscrow.sol";
+import {EscrowTestBase} from "./utils/EscrowTestBase.sol";
 
-contract ChargeMeshEscrowTest is Test {
-    event SettlerUpdated(address indexed previousSettler, address indexed newSettler);
-
-    ChargeMeshEscrow internal escrow;
-    address internal owner = makeAddr("owner");
-    address internal settler = makeAddr("settler");
-    address internal stranger = makeAddr("stranger");
-
-    function setUp() public {
-        escrow = new ChargeMeshEscrow(owner, settler);
-    }
-
+/// @notice Constructor, views, settler rotation and ownership.
+contract ChargeMeshEscrowTest is EscrowTestBase {
     // ---------- Constructor ----------
 
     function test_constructor_setsOwnerAndSettler() public view {
@@ -29,7 +19,7 @@ contract ChargeMeshEscrowTest is Test {
 
     function test_constructor_emitsSettlerUpdated() public {
         vm.expectEmit(true, true, false, false);
-        emit SettlerUpdated(address(0), settler);
+        emit IChargeMeshEscrow.SettlerUpdated(address(0), settler);
         new ChargeMeshEscrow(owner, settler);
     }
 
@@ -47,6 +37,7 @@ contract ChargeMeshEscrowTest is Test {
 
     function test_settlementGrace_isOneDay() public view {
         assertEq(escrow.SETTLEMENT_GRACE(), 1 days);
+        assertEq(escrow.SETTLEMENT_GRACE(), 86_400);
     }
 
     function test_views_defaultEmpty() public view {
@@ -54,6 +45,23 @@ contract ChargeMeshEscrowTest is Test {
         assertEq(uint8(r.status), uint8(IChargeMeshEscrow.Status.None));
         assertEq(r.driver, address(0));
         assertFalse(escrow.isSlotTaken(keccak256("slot:none")));
+        assertEq(escrow.pendingWithdrawal(driver), 0);
+    }
+
+    function test_hashQuote_isDeterministicAndFieldSensitive() public view {
+        IChargeMeshEscrow.ReservationQuote memory q = _quote();
+        bytes32 h = escrow.hashQuote(q);
+        assertEq(escrow.hashQuote(q), h);
+        q.requestedWh += 1;
+        assertTrue(escrow.hashQuote(q) != h);
+    }
+
+    function test_rejectsPlainEtherTransfers() public {
+        vm.deal(stranger, 1 ether);
+        vm.prank(stranger);
+        (bool ok,) = address(escrow).call{value: 1 ether}("");
+        assertFalse(ok, "escrow has no receive/fallback");
+        assertEq(address(escrow).balance, 0);
     }
 
     // ---------- setSettler ----------
@@ -61,7 +69,7 @@ contract ChargeMeshEscrowTest is Test {
     function test_setSettler_updatesAndEmits() public {
         address next = makeAddr("nextSettler");
         vm.expectEmit(true, true, false, false, address(escrow));
-        emit SettlerUpdated(settler, next);
+        emit IChargeMeshEscrow.SettlerUpdated(settler, next);
         vm.prank(owner);
         escrow.setSettler(next);
         assertEq(escrow.settler(), next);
@@ -92,6 +100,53 @@ contract ChargeMeshEscrowTest is Test {
         assertEq(escrow.settler(), next);
     }
 
+    function test_setSettler_oldSignaturesInvalid_newSignaturesValid() public {
+        IChargeMeshEscrow.ReservationQuote memory q = _quote();
+        bytes memory oldSig = _sign(q);
+
+        (address newSettler, uint256 newPk) = makeAddrAndKey("newSettler");
+        _setSettler(newSettler);
+
+        vm.expectRevert(IChargeMeshEscrow.InvalidSignature.selector);
+        vm.prank(driver);
+        escrow.reserve{value: DEPOSIT}(q, oldSig);
+
+        bytes memory newSig = _signWith(newPk, q);
+        vm.prank(driver);
+        escrow.reserve{value: DEPOSIT}(q, newSig);
+        _assertStatus(RID, IChargeMeshEscrow.Status.Reserved);
+    }
+
+    function test_setSettler_movesSettlerRights() public {
+        _reserveDefault();
+        address newSettler = makeAddr("newSettler");
+        _setSettler(newSettler);
+
+        vm.expectRevert(IChargeMeshEscrow.NotSettler.selector);
+        vm.prank(settler);
+        escrow.startSession(RID);
+
+        vm.prank(newSettler);
+        escrow.startSession(RID);
+
+        vm.expectRevert(IChargeMeshEscrow.NotSettler.selector);
+        vm.prank(settler);
+        escrow.settle(RID, 1, SESSION_HASH);
+
+        vm.prank(newSettler);
+        escrow.settle(RID, 20_000, SESSION_HASH);
+        _assertStatus(RID, IChargeMeshEscrow.Status.Settled);
+    }
+
+    function test_setSettler_existingReservationsSurviveRotation() public {
+        IChargeMeshEscrow.ReservationQuote memory q = _reserveDefault();
+        _setSettler(makeAddr("newSettler"));
+        vm.warp(uint256(q.endTime) + 1);
+        uint256 before = driver.balance;
+        escrow.expire(RID);
+        assertEq(driver.balance - before, DEPOSIT);
+    }
+
     // ---------- Ownable2Step ----------
 
     function test_ownership_isTwoStep() public {
@@ -101,86 +156,52 @@ contract ChargeMeshEscrowTest is Test {
         assertEq(escrow.owner(), owner);
         assertEq(escrow.pendingOwner(), newOwner);
 
+        // Pending owner has no rights yet.
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, newOwner));
+        vm.prank(newOwner);
+        escrow.setSettler(newOwner);
+
         vm.prank(newOwner);
         escrow.acceptOwnership();
         assertEq(escrow.owner(), newOwner);
+        assertEq(escrow.pendingOwner(), address(0));
+
+        // Previous owner lost its rights; the new owner has them.
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, owner));
+        vm.prank(owner);
+        escrow.setSettler(owner);
+
+        vm.prank(newOwner);
+        escrow.setSettler(stranger);
+        assertEq(escrow.settler(), stranger);
     }
 
-    // ---------- M0 stubs ----------
-
-    function test_m0_businessFunctionsRevertNotImplemented() public {
-        IChargeMeshEscrow.ReservationQuote memory q;
-        bytes32 id = keccak256("reservation:x");
-
-        vm.expectRevert(ChargeMeshEscrow.NotImplemented.selector);
-        escrow.reserve(q, "");
-        vm.expectRevert(ChargeMeshEscrow.NotImplemented.selector);
-        escrow.cancel(id);
-        vm.expectRevert(ChargeMeshEscrow.NotImplemented.selector);
-        escrow.expire(id);
-
-        vm.startPrank(settler);
-        vm.expectRevert(ChargeMeshEscrow.NotImplemented.selector);
-        escrow.startSession(id);
-        vm.expectRevert(ChargeMeshEscrow.NotImplemented.selector);
-        escrow.settle(id, 1, bytes32(uint256(1)));
-        vm.stopPrank();
+    function test_ownership_onlyPendingOwnerCanAccept() public {
+        vm.prank(owner);
+        escrow.transferOwnership(makeAddr("newOwner"));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        escrow.acceptOwnership();
     }
 
-    function test_settlerFunctions_revertForNonSettler() public {
-        bytes32 id = keccak256("reservation:x");
-        vm.startPrank(stranger);
-        vm.expectRevert(IChargeMeshEscrow.NotSettler.selector);
-        escrow.startSession(id);
-        vm.expectRevert(IChargeMeshEscrow.NotSettler.selector);
-        escrow.settle(id, 1, bytes32(uint256(1)));
-        vm.stopPrank();
+    function test_ownership_transferOnlyByOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        escrow.transferOwnership(stranger);
     }
 
-    // ---------- TODO(M1): docs/04-akilli-sozlesme.md "Test gereksinimleri" ----------
-    // The functions below are placeholders (prefix `todo_`, so forge does not run them).
-    // Each one must become a real `test_` / `testFuzz_` before M1 is done.
-    // When implementing, delete test_m0_businessFunctionsRevertNotImplemented.
+    // ---------- renounceOwnership disabled ----------
 
-    // reserve: happy path and every revert condition
-    function todo_reserve_happyPath() public {}
-    function todo_reserve_revertsOnWrongSigner() public {}
-    function todo_reserve_revertsOnIncorrectDeposit_msgValue() public {}
-    function todo_reserve_revertsOnIncorrectDeposit_quoteDeposit() public {}
-    function todo_reserve_revertsOnExpiredQuote() public {}
-    function todo_reserve_revertsOnReusedReservationId() public {}
-    function todo_reserve_revertsOnTakenSlotRef() public {}
-    function todo_reserve_revertsWhenSenderIsNotDriver() public {}
-    function todo_reserve_revertsOnInvalidQuote_startNotBeforeEnd() public {}
-    function todo_reserve_revertsOnInvalidQuote_zeroRequestedWh() public {}
+    function test_renounceOwnership_revertsForOwner() public {
+        vm.expectRevert(IChargeMeshEscrow.RenounceDisabled.selector);
+        vm.prank(owner);
+        escrow.renounceOwnership();
+        assertEq(escrow.owner(), owner);
+    }
 
-    // startSession and settle: exact balances for full / partial / over / zero delivery
-    function todo_startSession_happyPath() public {}
-    function todo_startSession_revertsForNonSettler() public {}
-    function todo_startSession_revertsAfterEndTime() public {}
-    function todo_settle_fullDelivery() public {}
-    function todo_settle_partialDelivery() public {}
-    function todo_settle_overDelivery() public {}
-    function todo_settle_zeroDelivery() public {}
-    function todo_settle_revertsOnZeroSessionHash() public {}
-    function todo_settle_revertsForNonSettler() public {}
-    function todo_settle_revertsWhenNotActive() public {}
-
-    // cancel and expire: time boundaries with vm.warp
-    function todo_cancel_beforeStartTime() public {}
-    function todo_cancel_revertsAtOrAfterStartTime() public {}
-    function todo_cancel_revertsForNonDriver() public {}
-    function todo_expire_reservedAfterEndTime() public {}
-    function todo_expire_reservedRevertsAtEndTime() public {}
-    function todo_expire_activeAfterEndTimePlusGrace() public {}
-    function todo_expire_activeRevertsAtEndTimePlusGrace() public {}
-    function todo_expire_revertsForFinalStates() public {}
-
-    // Reentrancy: malicious host contract cannot re-enter settle
-    function todo_settle_maliciousHostCannotReenter() public {}
-
-    // EIP-712 compatibility: covered by test/Eip712Compat.t.sol (fixture from shared)
-
-    // Fuzz: hostAmount + refund == deposit for random requestedWh, deliveredWh, pricePerKwhWei
-    function todo_testFuzz_settle_conservesDeposit() public {}
+    function test_renounceOwnership_revertsForNonOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        escrow.renounceOwnership();
+    }
 }
