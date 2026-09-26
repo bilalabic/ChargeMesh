@@ -18,7 +18,7 @@ param(
   [string]$SimArgs = "",
   [switch]$SkipFrontend,
   [switch]$SkipPreflight,
-  [int]$ApiStartupTimeoutSeconds = 45,
+  [int]$ApiStartupTimeoutSeconds = 90,
   # CORS origin and QR start-URL root. Set this to the Vercel production URL when the
   # frontend is served from https://chargemesh.vercel.app instead of localhost:3000.
   [string]$WebBaseUrl = "http://localhost:3000"
