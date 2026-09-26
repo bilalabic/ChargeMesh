@@ -9,7 +9,7 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 | 3 · Host, slot, seed ve matching | Tamamlandı | `feat(backend): implement nodes slots and matching` | API ve sim: typecheck, lint, test geçti |
 | 4 · Rezervasyon yaşam döngüsü | Tamamlandı | `feat(backend): implement reservation lifecycle` | API ve sim: typecheck, lint, test geçti |
 | 5 · OCPP, oturum ve Proof of Charge | Tamamlandı | `feat(backend): complete OCPP charging sessions` | API ve sim: typecheck, lint, test geçti |
-| 6 · M1 uçtan uca kabul | Bekliyor | `test(backend): cover mock demo workflow` | typecheck, lint, test, Atlas smoke (opsiyonel) |
+| 6 · M1 uçtan uca kabul | Tamamlandı | `test(backend): cover mock demo workflow` | API ve sim: typecheck, lint, test geçti; Atlas smoke çalıştırılmadı |
 | 7 · M2 Anvil entegrasyonu | Bekliyor | `test(backend): add anvil chain integration` | Anvil deployment varsa çalıştırılır |
 | 8 · M3–M4 canlı mod ve kurtarma | Bekliyor | `fix(backend): harden settlement recovery and live mode` | mock/anvil; Monad işlemi ayrıca onay gerektirir |
 
@@ -59,4 +59,14 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 - SSE ilk `session.updated`, meter, settled, error ve 15 saniyelik ping olaylarını yayınlıyor.
 - Kayıtlı/kayıtsız OCPP boot ve tam session → settlement → proof akışı test edildi.
 - `@chargemesh/api`: typecheck, lint ve 24 test geçti.
+- `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.
+
+## Faz 6 · M1 uçtan uca kabul
+
+- MemoryStore ve mock chain ile seed → match → reserve → confirm → start → charge → settle → proof akışı HTTP seviyesinde doğrulandı.
+- Gerçek WebSocket OCPP merkez–simülatör döngüsü hem 20.000 Wh tam teslimi hem 14.500 Wh `EVDisconnected` kısmi teslimi kapsıyor.
+- Her iki akışta Proof of Charge hash'i zincirdeki mock session hash'iyle doğrulandı.
+- Opt-in Atlas smoke testi eklendi: yalnızca ayrı `MONGODB_TEST_URI` ile çalışıyor, benzersiz `chargemesh_smoke_*` veritabanı açıyor ve silmeden önce öneki doğruluyor.
+- `MONGODB_TEST_URI` sağlanmadığı için gerçek Atlas smoke testi çalıştırılmadı; başarılı gösterilmedi.
+- `@chargemesh/api`: typecheck ve lint geçti; 26 test geçti, Atlas smoke testi atlandı.
 - `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.

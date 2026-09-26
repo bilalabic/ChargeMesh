@@ -60,6 +60,7 @@ corepack pnpm --filter @chargemesh/api db:indexes
 ```
 
 Normal Vitest çalışması Atlas'a bağlanmaz; aynı store sözleşmesinin bellek uygulamasını kullanır.
+Opsiyonel smoke testi için yalnızca bu işe ayrılmış, kısıtlı bir Atlas kullanıcısının URI'sini `MONGODB_TEST_URI` olarak verin ve `corepack pnpm --filter @chargemesh/api test:atlas` çalıştırın. Test yalnızca benzersiz `chargemesh_smoke_` önekli kendi veritabanını oluşturur ve bu öneki doğruladıktan sonra siler.
 
 ## Komutlar
 
@@ -69,5 +70,6 @@ Normal Vitest çalışması Atlas'a bağlanmaz; aynı store sözleşmesinin bell
 | `corepack pnpm --filter @chargemesh/api typecheck` | Tip kontrolü |
 | `corepack pnpm --filter @chargemesh/api lint` | ESLint |
 | `corepack pnpm --filter @chargemesh/api test` | Vitest (veritabanı ve ağ gerektirmez) |
+| `corepack pnpm --filter @chargemesh/api test:atlas` | Ayrı test kullanıcısıyla opt-in Atlas smoke testi |
 
 API sözleşmesinin tamamı [docs/03-api.md](../../docs/03-api.md), OCPP ayrıntıları [docs/05-ocpp.md](../../docs/05-ocpp.md) belgesindedir. Bu klasörün kuralları için [AGENTS.md](AGENTS.md) dosyasına bakın.

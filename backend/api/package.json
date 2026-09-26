@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
+    "test:atlas": "vitest run src/db/atlas-smoke.test.ts",
     "db:indexes": "tsx --env-file-if-exists=.env src/db/indexes-cli.ts"
   },
   "dependencies": {
