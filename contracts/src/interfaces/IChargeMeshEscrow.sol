@@ -91,6 +91,8 @@ interface IChargeMeshEscrow {
     error ZeroAddress();
     error NothingToWithdraw();
     error RenounceDisabled();
+    /// @notice The caller left too little gas to forward the full push stipend to a recipient.
+    error InsufficientGas();
 
     // ---------- Driver ----------
 

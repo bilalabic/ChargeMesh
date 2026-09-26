@@ -29,6 +29,9 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     ///      that reverts or runs out of gas is credited in {pendingWithdrawal} instead (docs/04, M-1).
     uint256 internal constant PUSH_GAS_LIMIT = 100_000;
 
+    /// @dev Headroom for the CALL itself (value transfer, cold account access) on top of the stipend.
+    uint256 internal constant PUSH_GAS_MARGIN = 40_000;
+
     /// @dev keccak256 of the EIP-712 type string. Must match
     ///      shared/src/chain/eip712.ts (RESERVATION_QUOTE_TYPESTRING) character for character.
     bytes32 internal constant RESERVATION_QUOTE_TYPEHASH = keccak256(
@@ -253,6 +256,9 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     ///      party can never block the other's payment. Zero amounts are skipped.
     function _payOrDefer(address to, uint256 amount) internal {
         if (amount == 0) return;
+        // Under the 63/64 rule a caller could starve the push and force a deferral; require enough
+        // gas to forward the full stipend so deferral only happens when the recipient itself fails.
+        if (gasleft() < PUSH_GAS_LIMIT * 64 / 63 + PUSH_GAS_MARGIN) revert InsufficientGas();
         bool ok;
         // `to` is always the stored driver or host of the reservation.
         assembly ("memory-safe") {
