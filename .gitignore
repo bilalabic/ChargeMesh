@@ -35,3 +35,6 @@ Thumbs.db
 .claude/worktrees/
 CLAUDE.local.md
 AGENTS.override.md
+
+.vercel
+.env*

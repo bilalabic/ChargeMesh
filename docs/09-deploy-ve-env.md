@@ -62,6 +62,8 @@ VITE_CHAIN_ID=10143
 
 Vue Router `createWebHistory()` kullandığı için depo kökündeki `vercel.json` bütün uygulama yollarını `/index.html` dosyasına yönlendiren SPA rewrite kuralını ve yukarıdaki install/build/output ayarlarını içerir.
 
+Proje `bilalabics-projects/chargemesh` adıyla bağlandı; production alias `https://chargemesh.vercel.app` adresindedir. Production ortamına `VITE_CHAIN_ID=10143` ve `VITE_API_URL` girilmiştir. Backend henüz ayrı bir serviste barındırılmadığı için `VITE_API_URL` şu an `http://localhost:4000/api/v1` değerini taşır: canlı site, API'nin çalıştığı demo dizüstü bilgisayarından tam işler (`localhost` çağrısı https sayfasından tarayıcılar tarafından güvenli kabul edilir). Backend bir HTTPS alan adına taşındığında `VITE_API_URL` güncellenip yeniden deploy edilir. Demo bilgisayarında API'yi bu siteye açmak için `./scripts/dev.ps1 -WebBaseUrl https://chargemesh.vercel.app` çalıştırın; CORS izni ve QR kök adresi bu origin'e ayarlanır.
+
 ## Backend API ve OCPP Central System
 
 Backend Vercel frontend projesine konmaz. Fastify API ile uzun süre açık kalan OCPP WebSocket sunucusunu çalıştırabilecek ayrı bir serviste barındırılır.

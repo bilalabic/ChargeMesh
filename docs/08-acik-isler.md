@@ -11,11 +11,13 @@ Bu liste, depodaki mevcut uygulama ve entegrasyon belgeleri kontrol edilerek 202
 
 ## Frontend
 
+- [x] Frontend Vercel'e deploy edildi: proje `bilalabics-projects/chargemesh`, production alias `https://chargemesh.vercel.app`. `VITE_API_URL` henüz localhost backend'ini gösterir; backend ayrı bir servise taşınınca Vercel env güncellenip yeniden deploy edilir.
 - [ ] Monad testnet'te Host ve Sürücü cüzdanlarıyla canlı rezervasyon, iptal/expire ve çekim akışlarını prova et; `pendingWithdrawal(address)` bakiyesinin üst bantta görünmesini, `withdraw()` sonrasında yenilenmesini, explorer bağlantılarını ve hata metinlerini kontrol et.
 - [ ] Masaüstünde iki cüzdan profiliyle demo akışını prova et; README hızlı başlangıcını temiz klondan izleyerek gerekli adımları doğrula.
 
 ## Backend ve entegrasyon
 
+- [ ] Backend + OCPP Central System için uzun süreli bir hosting seç (Vercel serverless kalıcı WebSocket'i barındıramaz) ve production `VITE_API_URL`'i bu adrese çevir.
 - [ ] Canlı Atlas + OCPP + Monad senaryosunda kesinti sonrası reconciliation davranışını doğrula; settle işlemi gönderildikten sonra API/DB kesilmesi durumunda kayıtların zincir durumuyla eşitlendiğini kontrol et.
 - [ ] Demo için kullanılan settler bakiyesini ve sürücü bakiyesini demo öncesi kontrol et; sırların yalnızca yerel `.env` dosyalarında kaldığını doğrula.
 

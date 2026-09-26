@@ -12,12 +12,16 @@
   ./scripts/dev.ps1
   ./scripts/dev.ps1 -SimArgs '--vehicle-accept 14500'
   ./scripts/dev.ps1 -SkipFrontend
+  ./scripts/dev.ps1 -WebBaseUrl https://chargemesh.vercel.app
 #>
 param(
   [string]$SimArgs = "",
   [switch]$SkipFrontend,
   [switch]$SkipPreflight,
-  [int]$ApiStartupTimeoutSeconds = 45
+  [int]$ApiStartupTimeoutSeconds = 45,
+  # CORS origin and QR start-URL root. Set this to the Vercel production URL when the
+  # frontend is served from https://chargemesh.vercel.app instead of localhost:3000.
+  [string]$WebBaseUrl = "http://localhost:3000"
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +38,7 @@ $env:CHAIN_MODE = "monad"
 $env:DEMO_ALLOW_ANY_TIME = "false"
 $env:PORT = "4000"
 $env:OCPP_PORT = "9000"
-$env:WEB_BASE_URL = "http://localhost:3000"
+$env:WEB_BASE_URL = $WebBaseUrl
 $env:CS_URL = "ws://localhost:9000/ocpp"
 $env:VITE_API_URL = "http://localhost:4000/api/v1"
 $env:VITE_CHAIN_ID = "10143"
