@@ -80,6 +80,34 @@ forge verify-contract <adres> ChargeMeshEscrow --chain 10143 \
 
 Deploy sonrasında `deployments/10143.json` dosyası ve `chain:sync` ile üretilen dosyalar tek bir commit'te birleştirilir: `chore(contracts): deploy escrow to monad testnet`.
 
+### Smoke testi
+
+`script/Smoke.s.sol`, deploy edilmiş sözleşmenin canlı zincirde uçtan uca çalıştığını doğrular. İki akış çalıştırır:
+
+1. **Ödeme akışı:** `reserve` → `startSession` → `settle`. Ardından kaydın `Settled` durumunda olduğunu ve Host tutarı ile iadenin formüle uyduğunu kontrol eder.
+2. **İptal akışı:** ileri tarihli bir rezervasyon için `reserve` → `cancel`. Ardından kaydın `Cancelled` olduğunu ve slotun serbest kaldığını kontrol eder.
+
+Betik, zincirdeki `settler()` adresinin `DEPLOYER_PRIVATE_KEY` adresiyle aynı olmasını şart koşar. Ortam değişkenleri:
+
+| Değişken | Varsayılan |
+| --- | --- |
+| `DEPLOYER_PRIVATE_KEY` | Zorunlu. Settler olarak kullanılır ve teklifi imzalar. |
+| `DRIVER_PRIVATE_KEY` | `DEPLOYER_PRIVATE_KEY` |
+| `HOST_ADDRESS` | Deployer adresi |
+| `ESCROW_ADDRESS` | `deployments/<chainId>.json` içindeki `escrow` |
+| `DELIVERED_WH` | `14500` |
+| `PRICE_WEI_PER_KWH` | `1e12` (20 kWh depozito = 2e13 wei) |
+
+Testnet komutu (anahtarlar `contracts/.env` dosyasından okunur):
+
+```bash
+forge script script/Smoke.s.sol --rpc-url https://testnet-rpc.monad.xyz --broadcast
+```
+
+Maliyet ihmal edilebilir düzeydedir: depozitolar küçüktür ve büyük kısmı iade edilir. Gerçekte harcanan, Host'a giden 1,45e13 wei ile 7 işlemin gas ücretidir. Betik deployment dosyası yazmaz. İşlem hash'leri `broadcast/Smoke.s.sol/10143/` altına kaydedilir.
+
+> Smoke testi testnet'te **gerçek işlemler** oluşturur. Yalnızca ekip onay verdiğinde çalıştırılır.
+
 `DEPLOYER_PRIVATE_KEY` yalnızca testnet anahtarıdır ve yalnızca ortam değişkeninden okunur. `.env` dosyası hiçbir koşulda commit edilmez.
 
 Bu klasörün çalışma kuralları için [AGENTS.md](AGENTS.md) dosyasına bakın.
