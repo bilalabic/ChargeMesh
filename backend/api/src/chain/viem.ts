@@ -28,6 +28,7 @@ import {
   type OnchainReservation,
   type ReserveTxVerification,
   type SettleResult,
+  SubmittedTransactionError,
 } from "./types";
 
 export interface ViemChainGatewayOptions {
@@ -57,10 +58,16 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
   const walletClient = createWalletClient({ chain, transport, account });
   const timeout = opts.receiptTimeoutMs ?? 60_000;
 
-  async function waitSuccess(hash: Hex, action: string): Promise<TransactionReceipt> {
-    const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout });
-    if (receipt.status !== "success") throw new Error(`${action} reverted (tx ${hash})`);
-    return receipt;
+  async function waitSuccess(hash: Hex, action: "startSession" | "settle"): Promise<TransactionReceipt> {
+    try {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout });
+      if (receipt.status !== "success") {
+        throw new Error(`${action} reverted`);
+      }
+      return receipt;
+    } catch (err) {
+      throw new SubmittedTransactionError(action, hash, err);
+    }
   }
 
   return {

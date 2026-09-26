@@ -8,7 +8,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../app";
-import { createMockChainGateway, type MockChainGateway } from "../chain";
+import { SubmittedTransactionError, createMockChainGateway, type MockChainGateway } from "../chain";
 import { loadConfig, type AppConfigEnv } from "../config";
 import { MemoryStore } from "../db/memory";
 import { ChargerRegistry } from "../ocpp/server";
@@ -145,5 +145,38 @@ describe("charging session lifecycle", () => {
     expect(proof.verified).toBe(true);
     expect(proof.summary.deliveredWh).toBe(document.requestedWh);
     expect(proof.summary.meterSamples.count).toBe(1);
+  });
+
+  it("keeps a submitted settlement hash when receipt waiting fails", async () => {
+    const reservation = await confirmedReservation();
+    const session = await service.start(DRIVER, {
+      chargePointId: seed.node.ocppChargePointId,
+      connectorId: seed.node.ocppConnectorId,
+      reservationId: reservation.reservation.id,
+    });
+    const transaction = await service.onStartTransaction({
+      chargePointId: session.chargePointId,
+      connectorId: session.connectorId,
+      idTag: session.ocppIdTag,
+      meterStartWh: 1_000_000,
+      timestamp: new Date(),
+    });
+    expect(transaction.accepted).toBe(true);
+    const submittedHash = `0x${"78".repeat(32)}` as `0x${string}`;
+    vi.spyOn(chain, "settle").mockRejectedValue(
+      new SubmittedTransactionError("settle", submittedHash, new Error("receipt timeout")),
+    );
+    await service.onStopTransaction({
+      chargePointId: session.chargePointId,
+      transactionId: transaction.transactionId,
+      meterStopWh: 1_014_500,
+      stoppedAt: new Date(),
+      reason: "EVDisconnected",
+    });
+    expect((await store.findSession(session._id))?.settleTxHash).toBe(submittedHash);
+    const failedReservation = await store.findReservation(reservation.reservation.id);
+    expect(failedReservation?.status).toBe("FAILED");
+    expect(failedReservation?.settleTxHash).toBe(submittedHash);
+    expect(failedReservation?.nextRetryAt).not.toBeNull();
   });
 });

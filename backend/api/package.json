@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "test:atlas": "vitest run src/db/atlas-smoke.test.ts",
+    "test:anvil": "vitest run src/chain/anvil.integration.test.ts",
     "db:indexes": "tsx --env-file-if-exists=.env src/db/indexes-cli.ts"
   },
   "dependencies": {

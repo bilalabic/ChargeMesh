@@ -1,20 +1,12 @@
 /** Chain gateway contract shared by the mock and viem implementations. */
-import type { ChainMode, ReservationQuote } from "@chargemesh/shared";
+import { onchainStatusName, type ChainMode, type OnchainStatusName, type ReservationQuote } from "@chargemesh/shared";
 import type { Address, Hex } from "viem";
 
 /** Mirrors `IChargeMeshEscrow.Status` (docs/04-akilli-sozlesme.md). Index = on-chain uint8. */
-export const ONCHAIN_STATUSES = [
-  "None",
-  "Reserved",
-  "Active",
-  "Settled",
-  "Cancelled",
-  "Expired",
-] as const;
-export type OnchainStatus = (typeof ONCHAIN_STATUSES)[number];
+export type OnchainStatus = OnchainStatusName;
 
 export function onchainStatusFromUint8(value: number): OnchainStatus {
-  const status = ONCHAIN_STATUSES[value];
+  const status = onchainStatusName(value);
   if (!status) throw new Error(`Unknown on-chain status ${value}`);
   return status;
 }
@@ -47,6 +39,22 @@ export interface SettleResult {
   hostAmountWei: bigint;
   refundWei: bigint;
   sessionHash: Hex;
+}
+
+/** A transaction was broadcast, but receipt processing failed. The hash must survive for reconciliation. */
+export class SubmittedTransactionError extends Error {
+  constructor(
+    readonly action: "startSession" | "settle",
+    readonly txHash: Hex,
+    cause: unknown,
+  ) {
+    super(`${action} transaction ${txHash} was submitted but not confirmed`, { cause });
+    this.name = "SubmittedTransactionError";
+  }
+}
+
+export function isSubmittedTransactionError(error: unknown): error is SubmittedTransactionError {
+  return error instanceof SubmittedTransactionError;
 }
 
 export interface ChainGateway {

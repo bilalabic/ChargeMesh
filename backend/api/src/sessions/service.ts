@@ -8,7 +8,7 @@ import {
   type StartSessionRequest,
 } from "@chargemesh/shared";
 import type { Hex } from "viem";
-import type { ChainGateway } from "../chain";
+import { isSubmittedTransactionError, type ChainGateway } from "../chain";
 import type { AppConfigEnv } from "../config";
 import type { Store } from "../db/store";
 import type { MeterSampleDocument, ReservationDocument, SessionDocument } from "../db/types";
@@ -161,6 +161,10 @@ export class ChargingSessionService {
       return { transactionId, accepted: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (isSubmittedTransactionError(err)) {
+        await this.store.updateSession(session._id, { startTxHash: err.txHash, updatedAt: new Date() });
+        await this.store.updateReservation(reservation._id, { startTxHash: err.txHash, updatedAt: new Date() });
+      }
       await this.failSession(session, reservation, message);
       return { transactionId, accepted: false };
     }
@@ -395,6 +399,10 @@ export class ChargingSessionService {
         },
       });
     } catch (err) {
+      if (isSubmittedTransactionError(err)) {
+        await this.store.updateSession(session._id, { settleTxHash: err.txHash, updatedAt: new Date() });
+        await this.store.updateReservation(reservation._id, { settleTxHash: err.txHash, updatedAt: new Date() });
+      }
       await this.failSession(session, reservation, err instanceof Error ? err.message : String(err));
     }
   }
