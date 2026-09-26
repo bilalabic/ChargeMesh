@@ -8,6 +8,10 @@ Rezervasyon ve ödeme Monad testnet üzerinde tutuluyor. Şarj oturumu OCPP prot
 
 > Bu bir hackathon projesidir. Gerçek şarj hizmeti sunmaz, gerçek para tahsil etmez. Cihaz tarafı bir OCPP simülatörüyle canlandırılır.
 
+<p align="center">
+  <img src="docs/images/readme/01-anasayfa.png" alt="ChargeMesh ana sayfası: Boşta duran şarj cihazı yok, rezerve edilmemiş kapasite var." width="100%">
+</p>
+
 ## Nasıl çalışır?
 
 ```mermaid
@@ -28,6 +32,72 @@ flowchart LR
 6. Oturum bitince özet çıkarılır, özetin hash'i zincire yazılır. Aktarılan enerjinin bedeli Host'a gönderilir, artan depozito Sürücü'ye iade edilir. Alıcılardan biri ödemeyi reddederse tutar kaybolmaz: Alıcının çekilebilir bakiyesine (`pendingWithdrawal`) eklenir ve `withdraw()` ile çekilir.
 
 Örneğin 20 kWh talep eden bir sürücü 0,2 MON depozito yatırır. Araç 14,5 kWh aldıktan sonra ayrılırsa Host'a 0,145 MON ödenir, sürücüye 0,055 MON geri döner.
+
+## Arayüzden bir tur
+
+Aşağıdaki ekranlar tek bir uçtan uca akıştan alındı. Rezervasyon gerçek `ChargeMeshEscrow` sözleşmesine yazıldı, şarj oturumu OCPP simülatörüyle ölçüldü ve hesaplaşma zincirde kapandı.
+
+### Sürücü: talepten Proof of Charge'a
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/05-surucu-talep.png" alt="Sürücü enerji talebi formu">
+      <p><b>1. Talep.</b> Sürücü gideceği mahalleyi, varış ve ayrılış saatini, ihtiyaç duyduğu enerjiyi ve kabul ettiği erişim türlerini seçer.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/06-eslesmeler.png" alt="Uygun şarj noktaları listesi">
+      <p><b>2. Eşleşme.</b> Uygun slotlar bağlantı tipine, mesafeye ve karşılanabilecek enerjiye göre sıralanır. Depozito tutarı baştan görünür.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/07-rezervasyon-onaylandi.png" alt="Onaylanmış rezervasyon ve erişim bilgileri">
+      <p><b>3. Rezervasyon.</b> Backend'in imzaladığı teklif MetaMask'tan sözleşmeye gönderilir, depozito kilitlenir. Açık adres ve erişim talimatı ancak bu aşamada Sürücü'ye açılır.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/08-sarj-suruyor.png" alt="Şarj sürerken oturum ekranı">
+      <p><b>4. Şarj.</b> Oturum OCPP üzerinden başlar; aktarılan enerji, güç ve işlem kayıtları oturum boyunca izlenir.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/09-sarj-tamamlandi.png" alt="Hesaplaşmış rezervasyon">
+      <p><b>5. Hesaplaşma.</b> Hedefe ulaşınca oturum kapanır. Reserve, start ve settle işlemlerinin hash'leri, Host'a giden tutar ve iade yan yana görünür.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/10-proof.png" alt="Proof of Charge ekranı">
+      <p><b>6. Proof of Charge.</b> Sayaç özeti tarayıcıda yeniden hash'lenir ve zincirdeki kayıtla karşılaştırılır: talep, aktarılan ve faturalanan enerji tek bakışta.</p>
+    </td>
+  </tr>
+</table>
+
+### Host: kapasiteyi yayınla, kazancı izle
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/02-host-yeni-node.png" alt="Yeni şarj noktası formu">
+      <p><b>Şarj noktası.</b> Host konumu, bağlantı tipini, gücü, erişim türünü ve OCPP charge point kimliğini tanımlar. Özel adres yalnızca onaylı Sürücü'ye gösterilir.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/04-host-node-detay.png" alt="Node detayı, Energy Slot ve başlatma QR kodu">
+      <p><b>Energy Slot ve QR.</b> Boş saatler kapasite ve fiyatla birlikte slot olarak yayınlanır. Cihaza yapıştırılacak başlatma QR'ı buradan alınır.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/03-host-panel.png" alt="Host paneli, çevrimiçi cihaz">
+      <p><b>Host paneli.</b> Simülatör bağlandığında cihaz "Çevrimiçi" görünür ve slot rezervasyona açılır.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/readme/11-host-panel-sonrasi.png" alt="Host panelinde hesaplaşmış rezervasyon">
+      <p><b>Sonuç.</b> Oturum bittiğinde rezervasyon "Hesaplaştı" olarak düşer; aktarılan enerjinin bedeli Host'a ödenmiştir.</p>
+    </td>
+  </tr>
+</table>
+
+> Ekranlar yerel bir test zincirinde (chainId 31337) herkese açık test hesaplarıyla alındı. Monad testnet'te akış aynıdır; yalnızca ağ ve cüzdan adresleri farklıdır.
 
 ## Depo yapısı
 
