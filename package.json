@@ -1,0 +1,30 @@
+{
+  "name": "chargemesh",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:web": "corepack pnpm --filter @chargemesh/web dev",
+    "dev:api": "corepack pnpm --filter @chargemesh/api dev",
+    "dev:sim": "corepack pnpm --filter @chargemesh/charger-sim dev",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "typecheck": "corepack pnpm -r typecheck",
+    "lint": "corepack pnpm -r lint",
+    "test": "corepack pnpm -r test",
+    "build": "corepack pnpm -r build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3"
+  }
+}
