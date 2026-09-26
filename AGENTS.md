@@ -10,16 +10,16 @@ ChargeMesh, atıl AC şarj cihazlarının kapasitesini, sürücünün gideceği 
 
 | Alan | Klasör | Oku |
 | --- | --- | --- |
-| Frontend | `frontend` | `docs/03-<frontend|api|charger-sim|shared>.md`, `docs/04-akilli-sozlesme.md` (EIP-712 ve hatalar) |
-| Backend | `backend/<frontend|api|charger-sim|shared>`, `backend/charger-sim` | `docs/02-mimari.md`, `docs/03-api.md`, `docs/05-ocpp.md` |
+| Frontend (Vue 3 + Vite) | `frontend` | `docs/02-mimari.md`, `docs/03-api.md`, `docs/04-akilli-sozlesme.md` (EIP-712 ve hatalar) |
+| Backend (Fastify + MongoDB Atlas) | `backend/api`, `backend/charger-sim` | `docs/02-mimari.md`, `docs/03-api.md`, `docs/05-ocpp.md` |
 | Blockchain | `contracts` | `docs/04-akilli-sozlesme.md` |
 | Entegrasyon | hepsi | `docs/06-demo-senaryosu.md`, `docs/07-paralel-calisma.md` |
 
 ## Değişmez kurallar
 
 1. **Kendi alanında kal.** Yalnızca görevlendirildiğin klasörü değiştir (sahiplik tablosu: `docs/07-paralel-calisma.md`). Başka ekibin koduna ihtiyaç duyarsan kodu değil, sözleşmesini (şema, ABI, belge) kullan.
-2. **Sözleşmeler donmuştur.** `shared/src/**`, `contracts/src/interfaces/**` ve `docs/03-05` dosyalarında değişiklik gerekiyorsa dur. Gerekçeyi yaz ve "sözleşme değişikliği protokolü"nü uygula (`docs/07-paralel-calisma.md`). Sessizce değiştirme; kendi tarafında geçici tip veya kopya da oluşturma.
-3. **Kendi versiyonunu yazma.** Kimlik dönüşümü (`ids.ts`), ücret hesabı (`units.ts`), Proof of Charge hash'i (`proof.ts`), eşleştirme (`matching.ts`), EIP-712 (`chain/eip712.ts`) ve ABI/adresler (`chain/`) yalnızca `@chargemesh/shared` paketinden alınır.
+2. **Sözleşmeler donmuştur:** `shared/src/**` (fixtures hariç), `contracts/src/interfaces/**` ve `docs/03-05` dosyaları. Bunlarda değişiklik gerekiyorsa dur. Gerekçeyi yaz ve "sözleşme değişikliği protokolü"nü uygula (`docs/07-paralel-calisma.md`). Sessizce değiştirme; kendi tarafında geçici tip veya kopya da oluşturma.
+3. **Kendi versiyonunu yazma.** Kimlik dönüşümü (`ids.ts`), ücret hesabı (`units.ts`), Proof of Charge hash'i (`proof.ts`), eşleştirme (`matching.ts`), EIP-712 (`chain/eip712.ts`), ABI/adresler ve zincir yardımcıları (`chain/`: `getDeployment`, `decodeEscrowError`, `waitForFinalized`, log yardımcıları) yalnızca `@chargemesh/shared` paketinden alınır.
 4. **Birimler:** Enerji tam sayı Wh, para wei (API'de ondalık string, kodda `bigint`), zaman ISO 8601 UTC (zincirde Unix saniyesi). `number` ile para hesabı yapılmaz.
 5. **Gizli bilgi yok:** `.env`, özel anahtar ve seed phrase asla okunmaz, yazdırılmaz ve commit edilmez. Yeni değişken eklenirse `.env.example` güncellenir. Yalnızca testnet ve yerel ağ kullanılır.
 6. **Kapsam:** `docs/01-urun.md` içindeki "Yapılmayacaklar" listesindeki hiçbir şey eklenmez (token, NFT, AI, dinamik fiyat vb.).
@@ -27,12 +27,12 @@ ChargeMesh, atıl AC şarj cihazlarının kapasitesini, sürücünün gideceği 
 ## Ortam
 
 - Windows 11 + PowerShell. Paket yöneticisi **pnpm 10**, `corepack` üzerinden çalışır: `corepack pnpm <komut>`. (`pnpm.exe` v11 bu makinede Device Guard tarafından engelleniyor; global `pnpm` ya da `npm install` kullanma.)
-- Node.js 22+. TypeScript `^5.9` (7.x kullanma).
+- Node.js 22+. Tüm paketlerde TypeScript `^5.9` kullanılır (frontend'de en az `5.9.3`). 7.x kullanma: `vue-tsc` 3 TypeScript'in JS derleyici API'sine dayanır ve 7.x bu API'yi sunmaz; `@wagmi/vue` de `>=5.9.3` ister.
 - Foundry yalnızca WSL'de çalışır:
   `wsl.exe -d Ubuntu-24.04 -- bash -lc "cd /mnt/c/Users/bilal/projects/ChargeMesh/contracts && ~/.foundry/bin/forge test"`
   (Worktree'de çalışıyorsan yolu kendi klasörüne göre değiştir.)
-- Kalıcı veri MongoDB Atlas'ta tutulur. Bağlantı yalnızca `MONGODB_URI` ve `MONGODB_DB_NAME`
-  ortam değişkenlerinden okunur; URI ve kimlik bilgileri loglanmaz.
+- Frontend: Vue 3 + Vite, Tailwind CSS 4, `@wagmi/vue` + viem + `@tanstack/vue-query`. Paket adı `@chargemesh/frontend`; yalnızca pnpm workspace kullanılır (`package-lock.json` yok).
+- Kalıcı veri yalnızca MongoDB Atlas'ta tutulur (Docker veya yerel veritabanı yok). Bağlantı yalnızca `MONGODB_URI` ve `MONGODB_DB_NAME` ortam değişkenlerinden okunur; URI ve kimlik bilgileri loglanmaz. Demo için internet ve Atlas IP Access List kaydı gerekir.
 
 ## Komutlar (kökten)
 
@@ -58,4 +58,4 @@ Bir işi "bitti" saymadan önce:
 
 - Kod, tanımlayıcılar, commit mesajları ve kod yorumları İngilizce yazılır.
 - `README.md` dosyaları ve `docs/` Türkçedir. Türkçe metinler çeviri kokmamalı; doğal ve akıcı yazılmalıdır. Teknik terimler (endpoint, slot, settlement vb.) gerektiğinde İngilizce bırakılır.
-- Kullanıcıya görünen arayüz metinleri Türkçedir.
+- Kullanıcıya görünen arayüz metinleri Türkçedir. Roller metinde ve arayüzde "Host" ve "Sürücü" diye geçer; `Driver` yalnızca koddaki tanımlayıcıdır.

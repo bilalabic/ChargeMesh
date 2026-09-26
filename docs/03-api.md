@@ -1,6 +1,6 @@
 # 03 · REST API Sözleşmesi (v1)
 
-> Sürüm: v1.0 · Sahibi: Backend (değişiklik protokolü için bkz. [07-paralel-calisma.md](07-paralel-calisma.md#sözleşme-değişikliği-protokolü))
+> Sürüm: v1.1 · Sahibi: Backend (değişiklik protokolü için bkz. [07-paralel-calisma.md](07-paralel-calisma.md#sözleşme-değişikliği-protokolü))
 >
 > **Tek doğruluk kaynağı** `shared/src/api/` altındaki zod şemalarıdır. Bu belge o şemaları insanlar için anlatır. İkisi çelişirse şema geçerlidir ve belge düzeltilir.
 
@@ -8,12 +8,13 @@
 
 - Temel adres: `http://localhost:4000/api/v1`. İstisnalar: `GET /health` kökte bulunur.
 - Gövde ve yanıtlar `application/json` biçimindedir. Alan adları `camelCase` yazılır.
-- **Zaman:** Alanlar ISO 8601 UTC (`2026-10-03T10:00:00.000Z`). Yalnızca zincire giden teklif alanları (`startTime`, `endTime`, `quoteExpiry`) Unix saniyesidir.
+- **Zaman:** Alanlar ISO 8601 UTC (`2026-10-03T10:00:00.000Z`). İstemciler zamanı `Date.prototype.toISOString()` ile gönderir; `Z` yerine saat farkı (`+03:00`) içeren değerler reddedilir. Yalnızca zincire giden teklif alanları (`startTime`, `endTime`, `quoteExpiry`) Unix saniyesidir ve ISO değerden `Math.floor(ms / 1000)` ile türetilir.
 - **Enerji:** Her zaman tam sayı **Wh**. kWh yalnızca arayüzde gösterim içindir (`whToKwh`).
 - **Para:** Her zaman wei cinsinden, **ondalık tam sayı string** (`"10000000000000000"`). JavaScript `number` kullanılmaz; hesaplamalar `bigint` ile yapılır.
 - **Adresler:** `0x` ile başlayan 40 hex karakter. API adresleri küçük harfe çevirerek saklar ve döndürür.
 - **Kimlikler:** Uygulama kimlikleri UUID'dir. Zincir kimlikleri `bytes32` hex'tir (bkz. [Kimlik dönüşümleri](#kimlik-dönüşümleri)).
-- Opsiyonel alanlar yoksa `null` döner, alan silinmez.
+- İsteğe bağlı alanlar yoksa `null` döner, alan silinmez.
+- Liste uçlarında sayfalama yoktur; sonuçların tamamı tek yanıtta döner.
 
 ## Kimlik
 
@@ -25,7 +26,7 @@ x-wallet-address: 0xAbC...123
 
 - Kimlik gerektiren uçlar başlık yoksa `401 UNAUTHORIZED` döner.
 - Sahiplik gerektiren uçlar (başkasının node'u, başkasının rezervasyonu) `403 FORBIDDEN` döner.
-- `EventSource` başlık gönderemediği için SSE ucu adresi `?wallet=0x...` sorgu parametresiyle de kabul eder.
+- `EventSource` başlık gönderemediği için SSE ucu adresi `?wallet=0x...` sorgu parametresiyle alır.
 
 > Bu yöntem kimlik taklidine açıktır ve yalnızca demo içindir. Gerçek sürümde SIWE (EIP-4361) kullanılmalıdır.
 
@@ -42,10 +43,10 @@ x-wallet-address: 0xAbC...123
 | 403 | `FORBIDDEN` | Kaynak bu cüzdana ait değil. |
 | 404 | `NOT_FOUND` | Kaynak yok. |
 | 409 | `SLOT_UNAVAILABLE` | Slot `OPEN` değil veya teklif verilirken başkası tuttu. |
-| 409 | `INVALID_STATE` | İşlem mevcut durumda yapılamaz (ör. `CONFIRMED` olmayan rezervasyonda oturum başlatmak). |
+| 409 | `INVALID_STATE` | İşlem mevcut durumda yapılamaz (ör. `CONFIRMED` olmayan rezervasyonda oturum başlatmak, hesaplaşmadan önce Proof istemek). |
 | 409 | `CHARGER_OFFLINE` | İlgili charge point OCPP'ye bağlı değil. |
 | 409 | `OUTSIDE_TIME_WINDOW` | Oturum rezervasyon penceresi dışında başlatılmak isteniyor. |
-| 409 | `AMBIGUOUS_RESERVATION` | `reservationId` verilmedi ve bu noktada sürücünün birden çok uygun rezervasyonu var. |
+| 409 | `AMBIGUOUS_RESERVATION` | `reservationId` verilmedi ve bu noktada Sürücü'nün birden çok uygun rezervasyonu var. |
 | 422 | `CHAIN_VERIFICATION_FAILED` | Tx bulunamadı, başarısız oldu ya da beklenen event'i içermiyor. |
 | 500 | `INTERNAL` | Beklenmeyen hata. |
 
@@ -146,6 +147,9 @@ Tam görünüm (`ChargingNode`) yalnızca node'un sahibine döner ve ek olarak �
 }
 ```
 
+- `deliverableWh`: Bu slotun pencere boyunca verebileceği en fazla enerji.
+- `quotedWh`: Teklife girecek enerji, yani `min(requestedWh, deliverableWh)`. Arayüzdeki "20 kWh karşılanabilir" ifadesi `quotedWh` değerini gösterir; depozito ve tahmini ücret de bu değerden hesaplanır.
+
 ### `Reservation`
 
 ```json
@@ -176,8 +180,10 @@ Tam görünüm (`ChargingNode`) yalnızca node'un sahibine döner ve ek olarak �
 }
 ```
 
-- `access` alanı yalnızca **sürücüye** ve yalnızca durum `CONFIRMED`, `ACTIVE`, `COMPLETED` veya `SETTLED` iken doludur. Diğer durumlarda `null` döner.
+- `access` alanı yalnızca **Sürücü'ye** ve yalnızca durum `CONFIRMED`, `ACTIVE`, `COMPLETED` veya `SETTLED` iken doludur. Diğer durumlarda `null` döner.
 - `settlement`: `{ deliveredWh, billableWh, hostAmountWei, refundWei, sessionHash }`, yalnızca `SETTLED` durumunda doludur.
+- `holdExpiresAt`: Slotun bu rezervasyon için tutulduğu son an, `quoteExpiry + 60 sn` (bkz. [`POST /reservations` davranışı](#post-reservations-davranışı)).
+- Bekleyen ödeme (`pendingWithdrawal`) API'de yer almaz. Frontend bu değeri doğrudan zincirden okur; backend yalnızca `PaymentDeferred` olaylarını loglar.
 
 ### `ReservationQuote`
 
@@ -226,9 +232,15 @@ Aşağıdaki tabloda 🔑 kimlik ister, 👤 kaynağın sahibi olmayı ister.
 | Metot ve yol | Açıklama | Yanıt |
 | --- | --- | --- |
 | `GET /health` | Canlılık kontrolü | `{ status: "ok", chainMode, chainId }` |
-| `GET /config` | Frontend'in ihtiyaç duyduğu zincir bilgileri | `AppConfig`: `{ chainId, chainMode, contractAddress, settlerAddress, explorerUrl, quoteTtlSeconds }` |
+| `GET /config` | Frontend'in ihtiyaç duyduğu zincir bilgileri. `live` modda frontend `chainId`, `contractAddress` ve `explorerUrl` değerlerini yalnızca buradan alır. `CHAIN_MODE=mock` iken `chainId` `31337`'dir. | `AppConfig`: `{ chainId, chainMode, contractAddress, settlerAddress, explorerUrl, quoteTtlSeconds }` |
 | `GET /chargers` | OCPP bağlantı durumu (hata ayıklama ve Host paneli için) | `ChargerStatus[]`: `{ chargePointId, connected, lastSeenAt, connectorStatus }` |
-| `POST /demo/seed` 🔑 | **Yalnızca** `NODE_ENV !== "production"`. Çağıran cüzdan adına demo node'u ve şu anı kapsayan bir slot oluşturur. İdempotenttir. | `{ node: ChargingNode, slot: EnergySlot }` |
+| `POST /demo/seed` 🔑 | **Yalnızca** `NODE_ENV !== "production"`. Aşağıya bakın. | `{ node: ChargingNode, slot: EnergySlot }` |
+
+`POST /demo/seed` davranışı charge point kimliği `CM-DEMO-001` üzerinden belirlenir:
+
+- Bu kimlikte node yoksa çağıran cüzdan adına oluşturulur. Node başka bir cüzdana aitse `409 INVALID_STATE` döner.
+- Node'da `OPEN` durumda bir slot yoksa şu anı kapsayan **yeni** bir `OPEN` slot oluşturulur. Hesaplaşması biten slotlar zincirde dolu kaldığı için tekrar kullanılmaz. `OPEN` bir slot varsa o slot döner.
+- Aynı çağrıyı tekrarlamak güvenlidir; yalnızca eksik olan oluşturulur.
 
 ### Host
 
@@ -236,6 +248,7 @@ Aşağıdaki tabloda 🔑 kimlik ister, 👤 kaynağın sahibi olmayı ister.
 | --- | --- | --- |
 | `POST /nodes` 🔑 | `CreateNodeRequest` | `201 ChargingNode` |
 | `GET /nodes?mine=true` 🔑 | – | `ChargingNode[]` (yalnızca kendi node'ları, tam görünüm) |
+| `GET /nodes` | – | `PublicChargingNode[]` (tüm node'ların herkese açık görünümü) |
 | `GET /nodes/:nodeId` | – | Sahibine `ChargingNode`, diğerlerine `PublicChargingNode` |
 | `POST /nodes/:nodeId/slots` 🔑👤 | `CreateSlotRequest` | `201 EnergySlot` |
 | `GET /nodes/:nodeId/slots` | – | `EnergySlot[]` (başlangıç zamanına göre artan) |
@@ -257,43 +270,71 @@ Aşağıdaki tabloda 🔑 kimlik ister, 👤 kaynağın sahibi olmayı ister.
 | `ocppChargePointId` | `^[A-Za-z0-9._-]{3,48}$`, sistem genelinde benzersiz |
 | `ocppConnectorId` | ≥ 1, varsayılan 1 |
 
-`CreateSlotRequest`: `startsAt < endsAt`, süre 30 dakika ile 24 saat arasında, `endsAt` gelecekte, `maxEnergyWh` 1.000–200.000 Wh, `pricePerKwhWei` sıfırdan büyük. Aynı node'da `CLOSED` olmayan slotlarla zaman çakışması `INVALID_STATE` döndürür.
+`CreateSlotRequest`: süre (`endsAt − startsAt`) 30 dakika ile 24 saat arasında, `endsAt` gelecekte, `maxEnergyWh` 1.000–200.000 Wh, `pricePerKwhWei` sıfırdan büyük. Bu kurallar, geçmiş tarih kontrolü dahil shared şemasında tanımlıdır ve ihlal edilirse `400 VALIDATION_ERROR` döner. Aynı node'da `CLOSED` olmayan slotlarla zaman çakışması `409 INVALID_STATE` döndürür.
 
-### Driver
+### Sürücü
 
 | Metot ve yol | Gövde | Yanıt |
 | --- | --- | --- |
 | `POST /intents` 🔑 | `CreateIntentRequest` | `201 ChargeIntent` |
 | `GET /intents/:intentId` 🔑👤 | – | `ChargeIntent` |
 | `GET /intents/:intentId/matches` 🔑👤 | – | `{ intentId, generatedAt, matches: MatchResult[] }` (en fazla 10) |
-| `POST /reservations` 🔑 | `{ intentId, slotId }` | `201 { reservation, quote, signature, contractAddress, chainId }` |
+| `POST /reservations` 🔑 | `{ intentId, slotId }` | `201 { reservation, quote, signature, contractAddress, chainId }`. Aynı teklif tekrar istenirse `200` ile mevcut kayıt döner. |
 | `POST /reservations/:id/confirm` 🔑👤 | `{ txHash }` | `Reservation` (idempotent) |
 | `POST /reservations/:id/sync` 🔑👤 | `{ txHash?: string }` | `Reservation`. Zincirdeki güncel durumu okur; `cancel` ve `expire` sonrası kullanılır. |
 | `GET /reservations?role=driver\|host` 🔑 | – | `Reservation[]` (yeniden eskiye) |
-| `GET /reservations/:id` 🔑👤 | – | `Reservation` (sürücü veya Host görebilir) |
-| `GET /reservations/:id/proof` 🔑👤 | – | `ProofResponse` |
+| `GET /reservations/:id` 🔑👤 | – | `Reservation` (Sürücü veya Host görebilir) |
+| `GET /reservations/:id/proof` 🔑👤 | – | `ProofResponse`. Rezervasyon `COMPLETED` olmadan önce `409 INVALID_STATE` döner. |
 
-`CreateIntentRequest`: `arriveAt < departAt`, `departAt` gelecekte, süre en fazla 24 saat, `requestedWh` 1.000–100.000, `radiusKm` 0,5–25 (varsayılan 3), `acceptedAccessTypes` boş olamaz (varsayılan: hepsi).
+`CreateIntentRequest`: `departAt` gelecekte, süre (`departAt − arriveAt`) en az 15 dakika ve en fazla 24 saat, `requestedWh` 1.000–100.000, `radiusKm` 0,5–25 (varsayılan 3), `acceptedAccessTypes` boş olamaz (varsayılan: hepsi). Bu kurallar da shared şemasındadır; ihlal `400 VALIDATION_ERROR` döndürür.
 
-`POST /reservations` davranışı:
+#### `POST /reservations` davranışı
 
-1. Slot `OPEN` değilse (veya `HELD` olup süresi dolmamışsa) `409 SLOT_UNAVAILABLE` döner.
-2. Eşleşme bu intent için yeniden hesaplanır. Slot artık uygun değilse yine `409 SLOT_UNAVAILABLE` döner.
-3. Rezervasyon `PENDING_PAYMENT`, slot `HELD` olur ve `holdExpiresAt = now + QUOTE_TTL_SECONDS` atanır.
-4. Teklif alanları şöyle doldurulur: `requestedWh = quotedWh`, `startTime`/`endTime` = eşleşme penceresi, `quoteExpiry = holdExpiresAt` ve `depositWei = depositFor(quotedWh, pricePerKwhWei)`. Teklif, settler anahtarıyla EIP-712 olarak imzalanır.
+1. Aynı Sürücü aynı intent ve slot için daha önce teklif aldıysa ve tutma süresi dolmadıysa yeni kayıt açılmaz; mevcut rezervasyon, teklif ve imza `200` ile döner. Böylece istemci isteği güvenle tekrarlayabilir.
+2. Slot `OPEN` değilse (veya başka bir rezervasyon adına `HELD` olup süresi dolmamışsa) `409 SLOT_UNAVAILABLE` döner.
+3. Eşleşme bu intent için yeniden hesaplanır. Slot artık uygun değilse yine `409 SLOT_UNAVAILABLE` döner.
+4. Rezervasyon `PENDING_PAYMENT`, slot `HELD` olur. Slot, kendisini tutan rezervasyonun kimliğini saklar; sonraki her slot geçişi bu kimliğe göre filtrelenir. Böylece bir rezervasyonun senkronizasyonu, başka bir rezervasyonun tuttuğu slotu açamaz.
+5. Süreler: `quoteExpiry = now + QUOTE_TTL_SECONDS` ve `holdExpiresAt = quoteExpiry + 60 sn`. Aradaki 60 saniye, son anda gönderilen işlemin bloğa girmesi ve saat farkları içindir. Süre dolumu tembel değerlendirilir: ayrı bir zamanlayıcı yoktur, kayıt okunurken veya güncellenirken kontrol edilir.
+6. Teklif alanları şöyle doldurulur: `requestedWh = quotedWh`, `startTime`/`endTime` = eşleşme penceresi, `depositWei = depositFor(quotedWh, pricePerKwhWei)`. Teklif, settler anahtarıyla EIP-712 olarak imzalanır.
 
-`POST /reservations/:id/confirm` davranışı: Tx receipt'i alınır. `status === success`, `to === contractAddress` ve loglarda bu `onchainId` ile bir `ReservationCreated` bulunmalıdır. Koşullar sağlanırsa rezervasyon `CONFIRMED`, slot `RESERVED` olur. `CHAIN_MODE=mock` iken biçimi doğru her hash kabul edilir.
+#### `POST /reservations/:id/confirm` davranışı
+
+- Tx receipt'i alınır. `status === success`, `to === contractAddress` olmalı ve loglarda bu `onchainId` ile bir `ReservationCreated` bulunmalıdır. Olaydaki değerler saklanan teklifle aynı olmalıdır.
+- Backend, receipt'in bloğu kesinleşene kadar bekler (`waitForFinalized`, bkz. [02-mimari.md](02-mimari.md#monadda-dikkat-edilecekler)). Bu genellikle yaklaşık 1 saniye ekler; yanıt birkaç saniye sürebilir. Zaman aşımında istemci aynı hash'le isteği tekrarlar.
+- Koşullar sağlanırsa rezervasyon `CONFIRMED`, slot `RESERVED` olur.
+- Durum `HOLD_EXPIRED` ise de `confirm` kabul edilir: `reserve()` `quoteExpiry`'den önce bloğa girmiş, onay ise geç gelmiş olabilir. Doğruluk kaynağı zincirdir. Olay doğrulanırsa slot bu rezervasyona `RESERVED` olarak atanır. Slot bu arada başka bir rezervasyon adına `HELD` olduysa o rezervasyon `HOLD_EXPIRED` yapılır; zincir aynı `slotRef` için ikinci `reserve()` çağrısını zaten `SlotAlreadyTaken` ile reddeder.
+- Zaten `CONFIRMED` olan bir rezervasyon için aynı hash tekrar gönderilirse mevcut kayıt döner. Farklı bir hash gönderilirse `409 INVALID_STATE` döner.
+- `CHAIN_MODE=mock` iken biçimi doğru her hash kabul edilir.
+
+#### Frontend'in zincirde doğrudan yaptıkları
+
+- **Bekleyen ödemeler:** Frontend, bağlı cüzdanın `pendingWithdrawal` değerini doğrudan sözleşmeden okur; sıfırdan büyükse uyarı ve `withdraw()` düğmesi gösterir. API'de bu bilgi için alan yoktur.
+- **Depozitoyu geri alma (`expire`):** "Depozitoyu geri al" düğmesi `CONFIRMED` rezervasyonlarda `window.endsAt` geçtikten sonra, `ACTIVE`, `COMPLETED` ve `FAILED` rezervasyonlarda ise `window.endsAt + 1 gün` (`SETTLEMENT_GRACE`) geçtikten sonra görünür. İşlem onaylanınca `POST /reservations/:id/sync` çağrılır.
+- **İptal (`cancel`):** Sürücü başlangıçtan önce zincirde `cancel()` çağırır, ardından `sync` çağrılır.
 
 ### Oturum
 
 | Metot ve yol | Gövde | Yanıt |
 | --- | --- | --- |
-| `POST /sessions/start` 🔑 | `{ chargePointId, connectorId, reservationId?: uuid }` | `201 ChargingSession` (`STARTING`) |
+| `POST /sessions/start` 🔑 | `{ chargePointId, connectorId, reservationId?: uuid }` | `201 ChargingSession` (`STARTING`). Oturum zaten varsa `200` ile mevcut oturum döner. |
 | `GET /sessions/:id` 🔑👤 | – | `ChargingSession` |
 | `POST /sessions/:id/stop` 🔑👤 | – | `ChargingSession` (`STOPPING`) |
-| `GET /sessions/:id/events?wallet=0x…` | – | `text/event-stream` |
+| `GET /sessions/:id/events?wallet=0x…` 🔑👤 | – | `text/event-stream` |
 
-`POST /sessions/start` kontrolleri: Rezervasyon sürücüye aittir ve `CONFIRMED` durumundadır. Node'un `ocppChargePointId`/`ocppConnectorId` değerleri istekle eşleşir. Cihaz bağlıdır. `DEMO_ALLOW_ANY_TIME=false` ise `now ∈ [startsAt − 15 dk, endsAt]` olmalıdır. `reservationId` verilmezse sürücünün o noktadaki tek `CONFIRMED` rezervasyonu seçilir.
+`POST /sessions/start` kontrolleri:
+
+- Rezervasyon Sürücü'ye aittir ve `CONFIRMED` durumundadır. `reservationId` verilmezse Sürücü'nün o noktadaki tek `CONFIRMED` rezervasyonu seçilir; hiç yoksa `404 NOT_FOUND`, birden fazlaysa `409 AMBIGUOUS_RESERVATION` döner.
+- Node'un `ocppChargePointId`/`ocppConnectorId` değerleri istekle eşleşir ve cihaz bağlıdır.
+- `DEMO_ALLOW_ANY_TIME=false` ise `now ∈ [startsAt − 15 dk, endsAt]` olmalıdır.
+- Rezervasyonun `STARTING`, `CHARGING` veya `STOPPING` durumunda bir oturumu varsa yeni oturum açılmaz, mevcut oturum döner. Önceki oturum `FAILED` ile bittiyse yeni oturum açılabilir.
+- Zincirde `Active` görünüp API'de `CONFIRMED` kalan bir rezervasyon (ör. `startSession` ile veritabanı yazımı arasında çökme) `sync` ile `ACTIVE` yapılır; bu durumda `start` `409 INVALID_STATE` döner. Depozito `SETTLEMENT_GRACE` sonrasında `expire()` ile geri alınır.
+
+Başlatma akışı:
+
+1. Backend `RemoteStartTransaction` gönderir. Simülatör `StartTransaction` ile yanıt verir ve Central System bu mesaja **hemen** `Accepted` döner.
+2. `startSession()` işlemi asenkron gönderilir ve hata alırsa yeniden denenir. Oturum, `txs.start` kesinleşene kadar `STARTING` kalır; bu sırada gelen sayaç değerleri yine kaydedilir. İşlem kesinleşince oturum `CHARGING`, rezervasyon `ACTIVE` olur.
+3. `startSession()` sonunda da başarısız olursa backend `RemoteStopTransaction` gönderir, oturum `FAILED` olur, rezervasyon `CONFIRMED` kalır ve hesaplaşma yapılmaz.
+4. `STARTING` durumundayken `stop` çağrılırsa backend başlatmayı `RemoteStopTransaction` ile iptal eder. `startSession()` henüz gönderilmediyse gönderilmez ve oturum `FAILED` olur. İşlem zaten gönderildiyse sonucu beklenir; başarılıysa oturum normal durdurma ve hesaplaşma yolundan devam eder.
 
 Oturum şu durumlarda biter:
 
@@ -301,7 +342,7 @@ Oturum şu durumlarda biter:
 - `deliveredWh ≥ requestedWh` olur. Backend bu durumda `RemoteStopTransaction` gönderir.
 - Simülatör kendiliğinden `StopTransaction` gönderir (araç ayrıldı).
 
-`deliveredWh` hiçbir zaman ödemede `requestedWh` üzerine çıkmaz; sözleşme `billableWh = min(deliveredWh, requestedWh)` hesaplar.
+`deliveredWh`, sayaç adımları nedeniyle `requestedWh` değerini biraz aşabilir; ödemede ise hiçbir zaman aşmaz, çünkü sözleşme `billableWh = min(deliveredWh, requestedWh)` hesaplar.
 
 #### SSE olayları
 
@@ -310,9 +351,12 @@ Oturum şu durumlarda biter:
 | `session.updated` | `ChargingSession` |
 | `meter` | `{ sessionId, timestamp, energyWh, deliveredWh, powerW }` |
 | `settled` | `{ sessionId, reservationId, settlement }` |
-| `error` | `{ code, message }` |
+| `session.error` | `{ code, message }` |
 
-Bağlantı açıldığında sunucu önce güncel `session.updated` olayını gönderir. Her 15 saniyede bir `: ping` yorumu yollanır.
+- Yalnızca rezervasyonun Sürücü'sü veya Host'u abone olabilir. Adres `?wallet=` ile verilir; yoksa veya geçersizse `401`, başka bir cüzdansa `403` döner.
+- Bağlantı açılınca sunucu önce güncel `session.updated` olayını, oturum zaten `SETTLED` ise ardından `settled` olayını gönderir. İstemci `settled` olayını aldıktan sonra bağlantıyı kapatır.
+- Her 15 saniyede bir `: ping` yorumu yollanır.
+- SSE yanıtı Fastify'ın yanıt hattını atlayıp doğrudan yazıldığı için CORS başlıkları (`Access-Control-Allow-Origin: WEB_BASE_URL`) bu yanıta ayrıca eklenir.
 
 ### Proof of Charge
 
@@ -331,7 +375,9 @@ Bağlantı açıldığında sunucu önce güncel `session.updated` olayını gö
 }
 ```
 
-`verified`, `keccak256(canonicalJson) === onchain.sessionHash` sonucudur. Frontend bu hesabı `computeSessionHash` ile tarayıcıda tekrar yapar ve sonucu kullanıcıya gösterir.
+- Proof, rezervasyon `COMPLETED` olduktan sonra alınabilir; daha önce `409 INVALID_STATE` döner.
+- `onchain`, rezervasyon `SETTLED` olana kadar `null` döner; bu durumda `verified` da `false` olur.
+- `verified`, `keccak256(canonicalJson) === onchain.sessionHash` sonucudur. Frontend bu hesabı `computeSessionHash` ile tarayıcıda tekrar yapar ve sonucu kullanıcıya gösterir.
 
 `ProofOfChargeSummary` (sürüm `chargemesh.poc.v1`):
 

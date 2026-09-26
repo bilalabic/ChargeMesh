@@ -1,6 +1,6 @@
 # 04 · Akıllı Sözleşme: `ChargeMeshEscrow`
 
-> Sürüm: v1.0 · Sahibi: Blockchain ekibi
+> Sürüm: v1.1 · Sahibi: Blockchain ekibi
 >
 > **Tek doğruluk kaynağı** `contracts/src/interfaces/IChargeMeshEscrow.sol` dosyasıdır. Frontend ve backend'in kullandığı ABI bu arayüzden üretilir ve `shared/src/chain/abi.ts` dosyasına yazılır. Arayüz değişirse ABI yeniden üretilmeden commit yapılmaz.
 
@@ -9,7 +9,7 @@
 Sözleşmenin üç görevi vardır:
 
 1. Backend'in (settler) imzaladığı bir teklifle **rezervasyonu ve depozitoyu** zincire kilitlemek
-2. Oturum bittiğinde **aktarılan enerjiye göre** depozitoyu Host ile Driver arasında paylaştırmak
+2. Oturum bittiğinde **aktarılan enerjiye göre** depozitoyu Host ile Sürücü arasında paylaştırmak
 3. Oturum özetinin **hash'ini** (Proof of Charge) kalıcı olarak kaydetmek
 
 Konum, adres, erişim bilgisi, kişi veya araç bilgisi ve ham sayaç verisi sözleşmeye **girmez**.
@@ -17,10 +17,10 @@ Konum, adres, erişim bilgisi, kişi veya araç bilgisi ve ham sayaç verisi sö
 ## Güven modeli
 
 - **Settler**, backend'in tuttuğu tek bir EOA'dır. Hem teklifleri imzalar hem de `startSession` ve `settle` çağrılarını yapar.
-- Driver, settler'ın imzaladığı bir teklif olmadan rezervasyon açamaz. Bu sayede fiyat, Host adresi, enerji miktarı ve zaman penceresi backend'in onayladığı değerlerle sınırlı kalır.
+- Sürücü, settler'ın imzaladığı bir teklif olmadan rezervasyon açamaz. Bu sayede fiyat, Host adresi, enerji miktarı ve zaman penceresi backend'in onayladığı değerlerle sınırlı kalır.
 - Oturum sonucunu settler bildirir. Bu bir **güven varsayımıdır**: Sözleşme, sayaç verisinin doğruluğunu kanıtlayamaz; yalnızca beyan edilen sonucu ve bu sonucun hash'ini kayda geçirir. Settler'ın kötüye kullanım alanı sınırlıdır: En fazla `depositWei` kadar tutarı Host'a yönlendirebilir.
 - Backend çökerse sürücünün parası kilitli kalmaz. `expire()` çağrısı herkese açıktır ve süre dolduğunda depozitoyu iade eder.
-- Hiçbir taraf diğerinin ödemesini engelleyemez. Alıcı ödemeyi reddederse tutar kaybolmaz, `pendingWithdrawal` hanesine yazılır ve sahibi bunu `withdraw()` ile çeker (bkz. [Ödeme modeli](#ödeme-modeli)).
+- Hiçbir taraf diğerinin ödemesini engelleyemez. Alıcı ödemeyi reddederse tutar kaybolmaz: Alıcının çekilebilir bakiyesine (`pendingWithdrawal`) eklenir, sahibi de bunu `withdraw()` ile çeker (bkz. [Ödeme modeli](#ödeme-modeli)).
 - Settler anahtarı ele geçirilirse zarar, sözleşmede kilitli depozitolarla sınırlıdır ve para yalnızca teklifte yazan Host'a gidebilir. Owner `setSettler` ile anahtarı değiştirdiğinde, eski anahtarla imzalanmış ama henüz kullanılmamış tüm teklifler de geçersiz olur.
 - Settler `startSession` çağrısını `startTime` öncesinde de yapabilir. Bu durumda sürücü artık `cancel` edemez. Sözleşme buna izin verir; zaman kontrolü backend'de yapılır (`[startsAt − 15 dk, endsAt]`, bkz. `docs/03-api.md`).
 
@@ -76,11 +76,11 @@ TypeScript karşılığı `shared/src/chain/eip712.ts` dosyasındadır (`reserva
 
 | Fonksiyon | Kim çağırır | Koşullar | Sonuç |
 | --- | --- | --- | --- |
-| `reserve(ReservationQuote q, bytes sig) payable` | Driver | `msg.sender == q.driver` · `msg.value == q.depositWei` · `block.timestamp <= q.quoteExpiry` · `q.startTime < q.endTime` · `q.requestedWh > 0` · `q.depositWei == ceilDiv(q.requestedWh × q.pricePerKwhWei, 1000)` · imzalayan == `settler` · rezervasyon `None` · `slotRef` boşta | `Reserved`, `slotTaken[slotRef] = true`, `ReservationCreated` |
+| `reserve(ReservationQuote q, bytes sig) payable` | Sürücü (`q.driver`) | `msg.sender == q.driver` · `msg.value == q.depositWei` · `block.timestamp <= q.quoteExpiry` · `q.startTime < q.endTime` · `q.requestedWh > 0` · `q.host != 0` · `q.depositWei == ceilDiv(q.requestedWh × q.pricePerKwhWei, 1000)` · imzalayan == `settler` · rezervasyon `None` · `slotRef` boşta | `Reserved`, `slotTaken[slotRef] = true`, `ReservationCreated` |
 | `startSession(bytes32 id)` | Settler | Durum `Reserved` · `block.timestamp <= endTime` | `Active`, `SessionStarted` |
-| `settle(bytes32 id, uint32 deliveredWh, bytes32 sessionHash)` | Settler | Durum `Active` · `sessionHash != 0` | `Settled`, Host'a `hostAmount`, Driver'a `refund` gönderilir, `ReservationSettled` |
-| `cancel(bytes32 id)` | Driver | Durum `Reserved` · `block.timestamp < startTime` | `Cancelled`, depozitonun tamamı iade edilir, slot serbest kalır, `ReservationCancelled` |
-| `expire(bytes32 id)` | Herkes | (`Reserved` ve `block.timestamp > endTime`) **veya** (`Active` ve `block.timestamp > endTime + SETTLEMENT_GRACE`) | `Expired`, depozitonun tamamı Driver'a iade edilir, slot serbest kalır, `ReservationExpired` |
+| `settle(bytes32 id, uint32 deliveredWh, bytes32 sessionHash)` | Settler | Durum `Active` · `sessionHash != 0` | `Settled`, Host'a `hostAmount`, Sürücü'ye `refund` gönderilir, `ReservationSettled` |
+| `cancel(bytes32 id)` | Sürücü | Durum `Reserved` · `block.timestamp < startTime` | `Cancelled`, depozitonun tamamı iade edilir, slot serbest kalır, `ReservationCancelled` |
+| `expire(bytes32 id)` | Herkes | (`Reserved` ve `block.timestamp > endTime`) **veya** (`Active` ve `block.timestamp > endTime + SETTLEMENT_GRACE`) | `Expired`, depozitonun tamamı Sürücü'ye iade edilir, slot serbest kalır, `ReservationExpired` |
 | `withdraw()` | Bekleyen alacağı olan herkes | `pendingWithdrawal(msg.sender) > 0`, aksi halde `NothingToWithdraw` | Alacak sıfırlanır, tamamı gönderilir, `Withdrawn`. Gönderim başarısız olursa `TransferFailed` ile revert eder ve alacak korunur. |
 | `setSettler(address)` | Owner | `address != 0` | `SettlerUpdated` |
 | `renounceOwnership()` | Owner | Her zaman `RenounceDisabled` | Kapalıdır; owner'sız bir sözleşmede settler bir daha değiştirilemezdi. |
@@ -103,13 +103,22 @@ refund      = depositWei - hostAmount
 
 `settle`, `cancel` ve `expire` çağrılarında ödemeler önce doğrudan gönderilir (push). Durum değişikliği gönderimden **önce** yapılır (checks-effects-interactions) ve tüm fonksiyonlar `nonReentrant` korumasına sahiptir.
 
-Gönderim 100.000 gaz sınırıyla ve dönüş verisi kopyalanmadan yapılır. Alıcı ödemeyi reddederse (kodlu bir cüzdan, EIP-7702 ile yetkilendirilmiş bir EOA veya kasıtlı olarak revert eden bir sözleşme) işlem **geri alınmaz**. Tutar alıcının `pendingWithdrawal` hanesine yazılır, `PaymentDeferred` olayı yayılır ve alıcı parasını daha sonra `withdraw()` ile çeker.
+Gönderim 100.000 gaz sınırıyla (`PUSH_GAS_LIMIT`) ve dönüş verisi kopyalanmadan yapılır. Alıcı ödemeyi reddederse (kodlu bir cüzdan, EIP-7702 ile yetkilendirilmiş bir EOA veya kasıtlı olarak revert eden bir sözleşme) işlem **geri alınmaz**. Tutar alıcının çekilebilir bakiyesine (`pendingWithdrawal`) eklenir, `PaymentDeferred` olayı yayılır ve alıcı parasını daha sonra `withdraw()` ile çeker.
 
-Ertelemenin yalnızca alıcının kendi hatasından kaynaklanması gerekir, çağıranın değil. EVM'de bir alt çağrıya kalan gazın en fazla 63/64'ü iletilebilir. Bu yüzden herkese açık `expire` bilerek düşük gazla çağrılırsa, kodlu bir alıcıya yapılan ödeme yapay olarak başarısız kılınabilirdi. Bunu önlemek için sözleşme, tam gaz payını iletecek kadar gaz kalmamışsa ödemeyi ertelemek yerine işlemi `InsufficientGas` ile geri alır.
+Ertelemenin yalnızca alıcının kendi hatasından kaynaklanması gerekir, çağıranın değil. EVM'de bir alt çağrıya kalan gazın en fazla 63/64'ü iletilebilir. Bu yüzden herkese açık `expire` bilerek düşük gazla çağrılırsa, kodlu bir alıcıya yapılan ödeme yapay olarak başarısız kılınabilirdi. Bunu önlemek için sözleşme her gönderimden önce şu koşulu arar:
+
+```
+gasleft() >= PUSH_GAS_LIMIT * 64 / 63 + PUSH_GAS_MARGIN
+          =  100000 * 64 / 63 + 50000     // ≈ 151.587 gaz
+```
+
+Koşul sağlanmazsa ödeme ertelenmez, işlem `InsufficientGas` ile geri alınır.
+
+**`PUSH_GAS_MARGIN` neden 50.000?** `CALL` işleminin kendi maliyeti, alt çağrıya iletilen paydan önce kalan gazdan düşülür. Monad'da soğuk hesap erişimi 10.100 gazdır (Ethereum'da 2.600). Buna değer taşıyan çağrı için 9.000, daha önce hiç kullanılmamış bir hesaba gönderim için de 25.000 gaz eklenir. En kötü durumda, yani yeni bir hesaba yapılan ilk gönderimde toplam **10.100 + 9.000 + 25.000 = 44.100 gaz** eder. İlk sürümdeki 40.000'lik pay Monad'da bu tutarı karşılamıyordu; 50.000 yeterli boşluk bırakır. Bu değişiklik yeni bir deploy gerektirdi: Güncel testnet adresi `{{ESCROW_ADDRESS}}`, deploy bloğu `{{DEPLOY_BLOCK}}`. Kodda adres her zaman `getDeployment(10143)` ile okunur.
 
 Bu model neden gerekli? Salt push modelinde, iadeyi reddeden bir sürücü `settle` çağrısını tamamen engelleyebilir, ardından `SETTLEMENT_GRACE` sonunda `expire` ile depozitonun tamamını geri alabilirdi. Yani şarj bedava olurdu. Yuvarlama nedeniyle iade çoğu zaman en az 1 wei olduğundan bu saldırı gerçekçidir. "Gönder, olmazsa alacak yaz" modeli bu yolu kapatır: Host'un ödemesi, sürücünün cüzdanı ne yaparsa yapsın gerçekleşir.
 
-Frontend ve backend, `pendingWithdrawal(adres) > 0` olduğunda kullanıcıya "Bekleyen ödemeniz var" uyarısı ve `withdraw()` düğmesi gösterir.
+Frontend, bağlı cüzdanın `pendingWithdrawal(adres)` değeri sıfırdan büyükse "Bekleyen ödemeniz var" uyarısını ve `withdraw()` düğmesini gösterir. Backend çekim yapmaz ve kullanıcıya düğme göstermez; `settle` receipt'inde (veya `sync` sırasında) gördüğü `PaymentDeferred` olaylarını yalnızca loglar.
 
 ## Olaylar
 
@@ -146,7 +155,7 @@ Kontroller aşağıdaki sırayla yapılır; ilk başarısız kontrolün hatası 
 | `reserve` | 1. `msg.sender != q.driver` → `NotDriver` · 2. `block.timestamp > q.quoteExpiry` → `QuoteExpired` · 3. `q.startTime >= q.endTime` veya `q.requestedWh == 0` veya `q.host == 0` → `InvalidQuote` · 4. `q.depositWei != ceilDiv(...)` veya `msg.value != q.depositWei` → `IncorrectDeposit` · 5. imzalayan settler değil → `InvalidSignature` · 6. rezervasyon zaten var → `ReservationExists` · 7. `slotTaken[q.slotRef]` → `SlotAlreadyTaken` |
 | `startSession` | `NotSettler` → durum `Reserved` değil: `InvalidStatus(current)` → `block.timestamp > endTime`: `TooLate` |
 | `settle` | `NotSettler` → durum `Active` değil: `InvalidStatus(current)` → `sessionHash == 0`: `ZeroSessionHash` |
-| `cancel` | durum `Reserved` değil: `InvalidStatus(current)` → çağıran driver değil: `NotDriver` → `block.timestamp >= startTime`: `TooLate` |
+| `cancel` | durum `Reserved` değil: `InvalidStatus(current)` → çağıran sürücü değil: `NotDriver` → `block.timestamp >= startTime`: `TooLate` |
 | `expire` | durum `Reserved` veya `Active` değil: `InvalidStatus(current)` → süre henüz dolmadı: `TooEarly` |
 
 ### Slotun yeniden kullanımı
@@ -168,10 +177,10 @@ Kontroller aşağıdaki sırayla yapılır; ilk başarısız kontrolün hatası 
 Blockchain ekibi en az şu Foundry testlerini yazar:
 
 - `reserve` için mutlu yol ve her `revert` koşulu (yanlış imzalayan, yanlış depozito, süresi geçmiş teklif, tekrar kullanılan `reservationId`, dolu `slotRef`, `msg.sender != driver`)
-- `startSession` ve `settle`: tam teslim, kısmi teslim (`delivered < requested`), fazla teslim (`delivered > requested`) ve `delivered = 0` durumları. Bakiyeler kuruşu kuruşuna doğrulanır.
+- `startSession` ve `settle`: tam teslim, kısmi teslim (`delivered < requested`), fazla teslim (`delivered > requested`) ve `delivered = 0` durumları. Bakiyeler wei'si wei'sine doğrulanır.
 - `cancel` ve `expire` için zaman sınırları (`vm.warp`)
 - Reentrancy: Host adresi kötü niyetli bir sözleşme olduğunda `settle` yeniden giriş yapamaz.
-- Ödeme reddi: Ödemeyi reddeden, sonsuz döngüye giren veya yeniden girmeye çalışan bir Host ya da Driver, diğer tarafın ödemesini engelleyemez. Tutar `pendingWithdrawal` hanesine yazılır ve `withdraw()` ile çekilebilir.
+- Ödeme reddi: Ödemeyi reddeden, sonsuz döngüye giren veya yeniden girmeye çalışan bir Host ya da Sürücü, diğer tarafın ödemesini engelleyemez. Tutar alıcının `pendingWithdrawal` bakiyesine eklenir ve `withdraw()` ile çekilebilir.
 - Gaz koruması: `expire` gibi herkese açık bir çağrı bilerek düşük gazla yapılırsa, ödeme ertelemeye zorlanmaz; işlem `InsufficientGas` ile geri alınır.
 - `withdraw`: `NothingToWithdraw`, başarılı çekim, çift çekim denemesi.
 - **EIP-712 uyumu:** `shared` ile üretilen örnek bir imza (sabit anahtar, sabit teklif, `test/fixtures/quote-signature.json`) sözleşme tarafından doğrulanmalıdır. Bu test, TypeScript ile Solidity tanımlarının birbirinden ayrışmasını önler.
@@ -179,13 +188,45 @@ Blockchain ekibi en az şu Foundry testlerini yazar:
 
 ## Deploy ve adres yayını
 
-1. **Yerel:** WSL'de `anvil` çalıştırılır, ardından `forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast` komutuyla deploy yapılır.
-2. **Testnet:** `--rpc-url https://testnet-rpc.monad.xyz` kullanılır. Deploy betiği adresi simülasyon aşamasında yazar. Bu yüzden `chain:sync` öncesinde `cast code <adres> --rpc-url …` ile adreste gerçekten kod olduğu doğrulanmalıdır. Doğrulama komutu: `forge verify-contract <adres> ChargeMeshEscrow --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`
-3. Deploy betiği, adresi ve blok numarasını `contracts/deployments/<chainId>.json` dosyasına yazar (`{ "chainId", "escrow", "settler", "deployBlock" }`).
+Güncel testnet dağıtımı: escrow `{{ESCROW_ADDRESS}}`, deploy bloğu `{{DEPLOY_BLOCK}}`, settler `0x10562C789bB833c1930cdc7115D4fC0C4D32BA73`. Kod bu değerleri elle değil, `getDeployment(10143)` ile okur.
+
+1. **Yerel (Anvil):** WSL'de ayrı bir terminalde `anvil` başlatılır ve demo ya da test boyunca **açık bırakılır**; terminal kapanırsa zincir ve deploy silinir. `forge`, `contracts/.env` dosyasını kendiliğinden yükler. Oradaki `DEPLOYER_PRIVATE_KEY` testnet anahtarıdır ve Anvil'de bakiyesi yoktur; `SETTLER_ADDRESS` doluysa settler da yanlış adrese atanır. Bu yüzden Anvil deploy'unda Anvil'in 0 numaralı hesabının anahtarı komut satırında açıkça verilir ve `SETTLER_ADDRESS` boşaltılır. Komut satırında verilen değer `.env` dosyasındakini ezer:
+
+   ```powershell
+   wsl.exe -d Ubuntu-24.04 -- bash -lc "cd /mnt/c/Users/bilal/projects/ChargeMesh/contracts && DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 SETTLER_ADDRESS= ~/.foundry/bin/forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast"
+   ```
+
+   Bu anahtar Anvil'in herkesçe bilinen test anahtarıdır; yalnızca yerel zincirde kullanılır. Deploy sonucu `deployments/31337.json` dosyasına yazılır. Bu dosya `.gitignore` kapsamındadır ve commit edilmez. `chain:sync` 31337'yi varsayılan olarak atlar; yerel adresi `deployments.ts` dosyasına almak için `--include-local` bayrağı verilir: `corepack pnpm --filter @chargemesh/shared chain:sync --include-local`. Bu çıktı da commit edilmez.
+2. **Testnet:** `--rpc-url https://testnet-rpc.monad.xyz` kullanılır; anahtar `contracts/.env` dosyasından okunur. Deploy betiği adresi simülasyon aşamasında yazar. Bu yüzden `chain:sync` öncesinde adreste gerçekten kod olduğu doğrulanır; çıktı `0x` ise deploy zincire ulaşmamıştır:
+
+   ```bash
+   cast code <adres> --rpc-url https://testnet-rpc.monad.xyz
+   forge verify-contract <adres> ChargeMeshEscrow --chain 10143 \
+     --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/
+   ```
+
+3. Deploy betiği adresi, settler'ı ve blok numarasını `contracts/deployments/<chainId>.json` dosyasına yazar (`{ "chainId", "escrow", "settler", "deployBlock" }`).
 4. Ardından Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `contracts/out/` altındaki ABI'yi `shared/src/chain/abi.ts`, deploy JSON'larını da `shared/src/chain/deployments.ts` dosyasına yazar. Üretilen dosyalar elle düzenlenmez.
 5. Adres değişikliği tek başına bir commit olur: `chore(contracts): deploy escrow to monad testnet`.
 
 `DEPLOYER_PRIVATE_KEY` ve `SETTLER_PRIVATE_KEY` yalnızca testnet anahtarlarıdır. Hiçbir koşulda commit edilmez ve mainnet'te kullanılmaz.
+
+## Monad'a özgü notlar
+
+Monad, EVM ile bayt kodu düzeyinde uyumludur ama birkaç noktada Ethereum'dan farklı davranır. Aşağıdaki kurallar Monad testnet'i (Monad v0.16.x, `MONAD_TEN` revizyonu) için geçerlidir; ayrıntılar resmi belgelerde:
+
+- **Ücret, harcanan gaza göre değil gaz *limitine* göre alınır.** `ücret = gas limit × gas fiyatı`; kullanılmayan gaz iade edilmez ([gas-pricing](https://docs.monad.xyz/developer-essentials/gas-pricing.md)). Bu yüzden:
+  - Frontend, cüzdana gaz limitini açıkça verir: `estimateContractGas` sonucu + %10. Göndermeden önce `simulateContract` ile işlemi dener; revert edecek bir işlem cüzdana hiç gönderilmez.
+  - Settler, her fonksiyon için sabit bir gaz limiti kullanır. Bu limitler **Anvil'de değil, testnet'te** ölçülür. Monad bazı işlemleri farklı fiyatlandırır: soğuk hesap erişimi 10.100 gaz, `ecrecover` 6.000 gaz; depolama erişimi de sayfa temelli fiyatlandırılır ([opcode-pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing.md)). Anvil'de ölçülen değerler Monad'da yetersiz kalabilir.
+- **Reserve balance kuralı: 10 MON.** Monad, her hesabın bakiyesinde gaz ödemeleri için 10 MON'luk bir tampon arar ([reserve-balance](https://docs.monad.xyz/developer-essentials/reserve-balance.md)). Bir işlem bakiyeyi azaltıp 10 MON'un altına düşürürse revert edebilir; son birkaç bloktaki işlemlerin toplam ücreti bu tamponu aşarsa işlem konsensüste reddedilir. Pratik sonuçları:
+  - Sürücü cüzdanında `depozito + ücret + 10 MON` kadar bakiye bulunmalıdır. Frontend bu koşul sağlanmıyorsa `reserve()` öncesinde uyarı gösterir.
+  - Settler cüzdanında en az 11 MON (10 MON tampon + gaz) tutulur.
+  - Cüzdana MON yüklendikten sonra `reserve()` göndermeden önce 1–2 saniye beklenir. Konsensüs, bakiyeyi birkaç blok geriden görür.
+- **Kesinlik (finality).** Monad'da blok önce önerilir, sonra kesinleşir. `latest` etiketiyle dönen receipt spekülatif olabilir ([block-states](https://docs.monad.xyz/monad-arch/consensus/block-states.md)). Backend, `confirm` doğrulamasında ve settler işlemlerinden sonra, veritabanındaki durumu değiştirmeden önce `waitForFinalized` yardımcısıyla işlemin kesinleşmesini bekler (yaklaşık 600 ms).
+- **Log sorguları.** Herkese açık RPC'ler `eth_getLogs` için blok aralığını sınırlar (ör. 100 blok). `eth_newFilter` gibi filtre RPC'leri desteklenmez ([json-rpc](https://docs.monad.xyz/reference/json-rpc/overview.md)). Olay taraması için `shared` içindeki parçalı (chunked) yardımcılar kullanılır; güncel durum için olay taraması yerine `getReservation` okunur. viem'in `watchContractEvent` gibi filtreye dayalı izleyicileri kullanılmaz.
+- **Nonce.** Monad'da `pending` etiketi `latest` ile aynı davranır; havuzdaki işlemler nonce hesabına katılmaz. Settler işlemleri bu yüzden tek bir sıradan (serialized queue) ya da viem'in `nonceManager`'ı ile gönderilir. Aynı anda gönderilen iki işlem aynı nonce'u alır.
+- **EIP-7702 etkin.** Bir EOA, kodu olan bir hesaba dönüşebilir ([eip-7702](https://docs.monad.xyz/developer-essentials/eip-7702.md)). Yani Host veya Sürücü adresinin ödemeyi reddetmesi mümkündür. Sözleşmedeki "gönder, olmazsa alacağa ekle" modeli (bkz. [Ödeme modeli](#ödeme-modeli)) bu riski karşılar.
+- Genel öneriler için [best-practices](https://docs.monad.xyz/developer-essentials/best-practices.md), güncel ağ bilgileri için [current-facts](https://docs.monad.xyz/ai/current-facts.md) sayfalarına bakın.
 
 ## Entegrasyon rehberi
 
@@ -196,14 +237,18 @@ Bu bölüm, frontend ve backend'in sözleşmeyle nasıl konuşacağını kısa �
 | Yardımcı | Ne işe yarar |
 | --- | --- |
 | `buildQuoteTypedData`, `quoteToContractArgs` | Teklifi EIP-712 imzası ve `reserve()` argümanı için hazırlar |
-| `findReservationCreated(receipt, reservationId, escrow)` | Receipt içinde, escrow adresinden yayılmış `ReservationCreated` olayını bulur; bulamazsa `null` döner |
+| `findReservationCreated(receipt, reservationId, escrow)` | Receipt içinde, escrow adresinden yayılmış `ReservationCreated` olayını bulur; bulamazsa `null` döner. Receipt durumu viem'in `"success"` değeri de olabilir, ham JSON-RPC'deki `"0x1"` de. |
+| `waitForFinalized(client, { hash })` | İşlemin bloğu kesinleşene kadar bekler (Monad'da yaklaşık 600 ms) ve kesinleşmiş receipt'i döner. Receipt henüz yoksa onu da bekler; süre dolarsa `FinalityTimeoutError`, blok değişmişse `ReorgDetectedError` fırlatır. `confirm` doğrulamasında ve her settler işleminden sonra, veritabanı güncellenmeden önce çağrılır (bkz. [Monad'a özgü notlar](#monada-özgü-notlar)). |
 | `parseEscrowEvents(logs, { escrow? })` | Loglardaki escrow olaylarını tipli olarak çözer |
-| `getEscrowEventsForReservation(client, { escrow, reservationId, fromBlock?, toBlock? })` | Bir rezervasyonun tüm olaylarını eskiden yeniye getirir; `fromBlock` verilmezse `deployBlock` kullanılır |
+| `fetchLogsChunked(client, { … })` | `eth_getLogs` sorgusunu 100 bloklık parçalara bölerek çalıştırır, geçici RPC hatalarında yeniden dener. Kendi tarayıcınızı yazıyorsanız bunu kullanın; `onProgress` ile işlenen son bloğu kaydedebilirsiniz |
+| `getEscrowEventsForReservation(client, { escrow, reservationId, fromBlock?, toBlock? })` | Bir rezervasyonun tüm olaylarını eskiden yeniye getirir. Sorguyu varsayılan olarak 100 bloklık parçalara böler (`maxBlockRange`). `fromBlock` verilmezse `deployBlock` kullanılır; `deployments.ts` içinde bulunmayan bir escrow için `fromBlock` zorunludur. |
 | `OnchainStatus`, `onchainStatusName`, `onchainStatusToReservationStatus` | Zincirdeki `Status` değerini adına ve API'deki `ReservationStatus` karşılığına çevirir |
 | `decodeEscrowError(err)`, `ESCROW_ERROR_MESSAGES_TR` | viem/wagmi hatalarının içinden sözleşme hatasını çıkarır ve kullanıcıya gösterilecek Türkçe mesajı verir |
 | `explorerTxUrl(chainId, hash)` | Monad testnet'te explorer bağlantısı üretir; diğer zincirlerde `null` döner |
 
 `ESCROW_ERROR_MESSAGES_TR`, ABI'deki hata adlarına göre tip kontrolünden geçer. ABI'ye yeni bir hata eklenip mesajı yazılmazsa `shared` paketinin `typecheck` adımı kırılır.
+
+Bu yardımcıların yerel kopyaları yazılmaz. Backend veya frontend içinde aynı işi yapan bir fonksiyon varsa `shared`'dakiyle değiştirilir.
 
 ### Backend
 
@@ -220,13 +265,14 @@ const signature = await settlerWallet.signTypedData(
 );
 ```
 
-**`confirm` doğrulaması.** Receipt başarılı olmalı, `to` alanı escrow adresini göstermeli ve loglarda bu rezervasyona ait bir `ReservationCreated` bulunmalıdır. `findReservationCreated`, başka bir sözleşmenin yaydığı aynı imzalı olayları ve başarısız receipt'leri kendisi eler:
+**`confirm` doğrulaması.** Receipt başarılı olmalı, `to` alanı escrow adresini göstermeli ve loglarda bu rezervasyona ait bir `ReservationCreated` bulunmalıdır. `findReservationCreated`, başka bir sözleşmenin yaydığı aynı imzalı olayları ve başarısız receipt'leri kendisi eler. Receipt spekülatif olabileceği için rezervasyon, işlem kesinleştikten sonra `CONFIRMED` yapılır:
 
 ```ts
-import { findReservationCreated } from "@chargemesh/shared";
+import { findReservationCreated, waitForFinalized } from "@chargemesh/shared";
 import { isAddressEqual, type Hex } from "viem";
 
-const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 30_000 });
+// Kesinleşmiş receipt: işlem henüz bloğa girmediyse onu da bekler.
+const receipt = await waitForFinalized(publicClient, { hash: txHash as Hex, timeoutMs: 30_000 });
 const created =
   receipt.to && isAddressEqual(receipt.to, deployment.escrow)
     ? findReservationCreated(receipt, reservation.onchainId as Hex, deployment.escrow)
@@ -238,14 +284,19 @@ const matches =
   created.args.slotRef === quote.slotRef &&
   isAddressEqual(created.args.driver, quote.driver as Hex) &&
   created.args.depositWei === BigInt(quote.depositWei);
+if (!matches) throw new ApiError("CHAIN_VERIFICATION_FAILED");
+// Ancak bundan sonra: rezervasyon CONFIRMED, slot RESERVED.
 ```
 
-İşlem henüz bloğa girmediyse `getTransactionReceipt` bir `TransactionReceiptNotFoundError` fırlatır. Bu yüzden kısa bir zaman aşımıyla `waitForTransactionReceipt` kullanmak daha sağlamdır. `confirm` idempotent olduğu için istemci aynı hash'le tekrar çağırabilir.
+İşlem henüz bloğa girmediyse `getTransactionReceipt` bir `TransactionReceiptNotFoundError` fırlatır. `waitForFinalized` ise receipt'i de bekler; bu yüzden kısa bir zaman aşımıyla onu kullanmak hem daha sağlam hem de spekülatif receipt'e karşı güvenlidir. `confirm` idempotent olduğu için istemci aynı hash'le tekrar çağırabilir.
 
-**`startSession` ve `settle`.** İşlemi göndermeden önce `simulateContract` ile denemek, olası bir revert'ü gaz harcamadan ve okunabilir bir hatayla yakalamayı sağlar:
+**`startSession` ve `settle`.** İşlemi göndermeden önce `simulateContract` ile denemek, olası bir revert'ü gaz harcamadan ve okunabilir bir hatayla yakalamayı sağlar. Monad ücreti gaz limitine göre aldığı için settler, testnet'te ölçülmüş sabit bir gaz limiti verir (bkz. [Monad'a özgü notlar](#monada-özgü-notlar)). Gönderim, settler işlemlerini tek tek gönderen sıranın içinde yapılır:
 
 ```ts
-import { chargeMeshEscrowAbi } from "@chargemesh/shared";
+import { chargeMeshEscrowAbi, waitForFinalized } from "@chargemesh/shared";
+// Backend'in kendi sabitleri: testnet'te ölçülmüş limit + pay. Anvil ölçümü kullanılmaz.
+import { SETTLE_GAS_LIMIT } from "./gas-limits";
+// settlerQueue: settler işlemlerini tek tek gönderen backend içi sıra (veya viem nonceManager).
 
 const { request } = await publicClient.simulateContract({
   account: settlerAccount,
@@ -253,18 +304,19 @@ const { request } = await publicClient.simulateContract({
   abi: chargeMeshEscrowAbi,
   functionName: "settle", // startSession için: functionName: "startSession", args: [onchainId]
   args: [onchainId, deliveredWh, sessionHash],
+  gas: SETTLE_GAS_LIMIT,
 });
-const hash = await settlerWallet.writeContract(request);
-const receipt = await publicClient.waitForTransactionReceipt({ hash });
+const hash = await settlerQueue.run(() => settlerWallet.writeContract(request));
+const receipt = await waitForFinalized(publicClient, { hash }); // DB bundan sonra güncellenir
 ```
 
-**`settle` başarısız olursa.** Rezervasyon `FAILED` durumuna geçer ve işlem yeniden denenebilir (bkz. `docs/02-mimari.md`). Tekrar denemeden önce zincirdeki durumu okuyun; önceki işlem aslında başarıyla bloğa girmiş olabilir:
+**`settle` başarısız olursa.** Rezervasyon `FAILED` durumuna geçer, oturumun SSE akışına `session.error` olayı gönderilir ve işlem yeniden denenebilir (bkz. `docs/02-mimari.md`). Tekrar denemeden önce zincirdeki durumu okuyun; önceki işlem aslında başarıyla bloğa girmiş olabilir:
 
 - `getReservation` durumu `Settled` gösteriyorsa (ya da `decodeEscrowError` bir `InvalidStatus` döndürdüyse ve durum `Settled` ise) işlemi yeniden göndermeyin. `getEscrowEventsForReservation` ile `ReservationSettled` olayını bulun, tx hash'ini ve tutarları oradan alın, rezervasyonu `SETTLED` yapın.
 - Durum `Expired` ise `SETTLEMENT_GRACE` dolmuş ve biri `expire()` çağırmıştır. Rezervasyon `EXPIRED` olur, yeniden deneme yapılmaz.
 - Durum hâlâ `Active` ise aynı `deliveredWh` ve `sessionHash` ile tekrar gönderin. Bu değerler deterministik olduğu için tekrar denemek güvenlidir. Ağ, nonce veya gaz kaynaklı hatalarda artan beklemeyle (backoff) birkaç deneme yeterlidir.
 - `NotSettler`, settler anahtarının değiştiğini; `ZeroSessionHash` ise backend'de bir hata olduğunu gösterir. Bu iki durumda otomatik deneme yapılmaz, hata loglanır.
-- Settler tek bir EOA olduğu için işlemleri sırayla gönderin. Aynı anda gönderilen iki işlem nonce çakışmasına yol açar.
+- Settler tek bir EOA'dır ve Monad'da `pending` etiketi `latest` ile aynı davranır. Bu yüzden işlemler tek bir sıradan ya da viem'in `nonceManager`'ı ile gönderilir. Aynı anda gönderilen iki işlem aynı nonce'u alır.
 
 **`sync`.** `POST /reservations/:id/sync`, zincirdeki güncel durumu okuyup API durumuna çevirir:
 
@@ -282,50 +334,59 @@ const next = onchainStatusToReservationStatus(onchain.status); // None → null
 
 `null`, rezervasyonun zincirde henüz bulunmadığı anlamına gelir; bu durumda mevcut durum korunur. `PENDING_PAYMENT`, `HOLD_EXPIRED`, `COMPLETED` ve `FAILED` yalnızca backend'de yaşayan durumlardır ve zincirde karşılıkları yoktur. Oturum bittikten sonra da rezervasyon zincirde `Active` görünmeye devam eder. Bu yüzden `COMPLETED` veya `FAILED` durumundaki bir rezervasyon `sync` ile `ACTIVE`'e geri çekilmez; bu durumları yalnızca `Settled`, `Cancelled` ve `Expired` gibi son durumlar ezer.
 
-**Bekleyen ödemeler.** Ödemeyi reddeden alıcının tutarı `pendingWithdrawal` hanesine yazılır (bkz. [Ödeme modeli](#ödeme-modeli)). `settle` receipt'inde `PaymentDeferred` olayı olup olmadığına bakabilir, bakiyeyi de doğrudan okuyabilirsiniz:
+**Bekleyen ödemeler.** Ödemeyi reddeden alıcının tutarı `pendingWithdrawal` bakiyesine eklenir (bkz. [Ödeme modeli](#ödeme-modeli)). Backend bu durumu yalnızca loglar; kullanıcıya uyarıyı frontend gösterir. `settle` receipt'indeki `PaymentDeferred` olaylarını şöyle bulabilirsiniz:
 
 ```ts
-import { chargeMeshEscrowAbi, parseEscrowEvents } from "@chargemesh/shared";
+import { parseEscrowEvents } from "@chargemesh/shared";
 
 const deferred = parseEscrowEvents(receipt.logs, { escrow: deployment.escrow }).filter(
   (e) => e.eventName === "PaymentDeferred",
 );
-const pending = await publicClient.readContract({
-  address: deployment.escrow,
-  abi: chargeMeshEscrowAbi,
-  functionName: "pendingWithdrawal",
-  args: [account],
-}); // wei, bigint
+for (const e of deferred) log.warn({ account: e.args.account, amount: e.args.amount }, "payment deferred");
 ```
 
-`getEscrowEventsForReservation`, `fromBlock` verilmediğinde taramaya `deployBlock` değerinden başlar. Herkese açık RPC'ler `eth_getLogs` için blok aralığını sınırlayabilir. Böyle bir durumda aralığı `fromBlock` ve `toBlock` ile daraltın. Güncel durumu öğrenmek için olay taraması yerine `getReservation` okumayı tercih edin.
+**Olay taraması.** `getEscrowEventsForReservation`, `fromBlock` verilmediğinde taramaya `deployBlock` değerinden başlar ve sorguyu 100 bloklık parçalara böler; herkese açık Monad RPC'leri daha geniş aralıkları reddeder. Monad'da blok süresi kısa olduğundan deploy bloğundan bugüne tarama çok sayıda istek demektir. Bu yüzden güncel durumu öğrenmek için olay taraması yerine `getReservation` okunur; olay taraması yalnızca tx hash'i veya tutar gibi geçmiş bilgiler gerektiğinde, mümkünse dar bir `fromBlock` ile yapılır. Sürekli bir tarayıcı gerekiyorsa son işlenen blok veritabanında saklanır ve tarama oradan devam eder.
 
 ### Frontend
 
-**Rezervasyon (`reserve`).** Adres ve zincir bilgisi `POST /reservations` yanıtındaki `contractAddress` ve `chainId` alanlarından gelir; backend bu değerleri `getDeployment` ile doldurur. Depozito `value` olarak gönderilir:
+Frontend Vue 3 ile yazılır ve cüzdan işlemleri için `@wagmi/vue` kullanır. Örneklerdeki `publicClient`, `shared` içindeki zincir tanımıyla oluşturulmuş bir viem istemcisidir:
 
-```tsx
+```ts
+import { supportedChains } from "@chargemesh/shared";
+import { createPublicClient, http } from "viem";
+
+const chain = supportedChains.find((c) => c.id === config.chainId)!; // GET /config yanıtından
+export const publicClient = createPublicClient({ chain, transport: http() });
+```
+
+**Rezervasyon (`reserve`).** Adres ve zincir bilgisi `POST /reservations` yanıtındaki `contractAddress` ve `chainId` alanlarından gelir; backend bu değerleri `getDeployment` ile doldurur. Depozito `value` olarak gönderilir. İşlem önce simüle edilir; gaz limiti tahminin %10 fazlası olarak açıkça verilir, çünkü Monad ücreti gaz limitine göre alır:
+
+```ts
 import {
   chargeMeshEscrowAbi,
   decodeEscrowError,
   quoteToContractArgs,
   type CreateReservationResponse,
 } from "@chargemesh/shared";
+import { useConnection, useWriteContract } from "@wagmi/vue";
 import type { Address, Hex } from "viem";
-import { useWriteContract } from "wagmi";
 
-const { mutateAsync: writeContract } = useWriteContract();
+const connection = useConnection();
+const { mutateAsync: writeContractAsync } = useWriteContract();
 
 async function pay({ reservation, quote, signature, contractAddress, chainId }: CreateReservationResponse) {
+  const call = {
+    account: connection.address.value as Address,
+    address: contractAddress as Address,
+    abi: chargeMeshEscrowAbi,
+    functionName: "reserve",
+    args: [quoteToContractArgs(quote), signature as Hex],
+    value: BigInt(quote.depositWei),
+  } as const;
   try {
-    const txHash = await writeContract({
-      address: contractAddress as Address,
-      abi: chargeMeshEscrowAbi,
-      functionName: "reserve",
-      args: [quoteToContractArgs(quote), signature as Hex],
-      value: BigInt(quote.depositWei),
-      chainId,
-    });
+    await publicClient.simulateContract(call); // revert edecekse cüzdan hiç açılmaz
+    const estimate = await publicClient.estimateContractGas(call);
+    const txHash = await writeContractAsync({ ...call, chainId, gas: (estimate * 110n) / 100n });
     await api.confirmReservation(reservation.id, { txHash });
   } catch (err) {
     showError(decodeEscrowError(err)?.message ?? "İşlem tamamlanamadı. Lütfen tekrar deneyin.");
@@ -333,37 +394,50 @@ async function pay({ reservation, quote, signature, contractAddress, chainId }: 
 }
 ```
 
+`reserve()` öncesinde Sürücü'nün bakiyesi `depozito + tahmini ücret + 10 MON` değerinden azsa "Cüzdanınızda en az 10 MON rezerv kalmalı" uyarısı gösterilir (bkz. [Monad'a özgü notlar](#monada-özgü-notlar)).
+
 `decodeEscrowError`, hatanın `cause` zincirini dolaşır; gaz tahmini, simülasyon ya da gönderim sırasında oluşan sözleşme hatalarını tanır. Sözleşme hatası bulamazsa `null` döner; kullanıcının işlemi cüzdanda reddetmesi buna örnektir. Bu durumu ayrıca ele almak isterseniz viem'in `BaseError.walk` yöntemiyle `UserRejectedRequestError` arayabilirsiniz. `InvalidStatus` hatasında mesaj, rezervasyonun şu anki durumunu da içerir: "Rezervasyon bu işlem için uygun durumda değil. Şu anki durumu: iptal edildi."
 
-**"Bekleyen ödemeniz var" uyarısı.** Bağlı cüzdanın `pendingWithdrawal` değeri sıfırdan büyükse uyarı ve çekim düğmesi gösterilir:
+**"Bekleyen ödemeniz var" uyarısı.** Bağlı cüzdanın `pendingWithdrawal` değeri sıfırdan büyükse uyarı ve çekim düğmesi gösterilir. `withdraw()` de aynı kuralla, simülasyon ve açık gaz limitiyle gönderilir:
 
-```tsx
+```ts
 import { chargeMeshEscrowAbi, decodeEscrowError, formatMon } from "@chargemesh/shared";
+import { useConnection, useReadContract, useWriteContract } from "@wagmi/vue";
+import { computed } from "vue";
 import type { Address } from "viem";
-import { useConnection, useReadContract, useWriteContract } from "wagmi";
 
 const contractAddress = config.contractAddress as Address; // GET /config yanıtından
-const { address } = useConnection();
-const { data: pending, refetch } = useReadContract({
-  address: contractAddress,
-  abi: chargeMeshEscrowAbi,
-  functionName: "pendingWithdrawal",
-  args: address ? [address] : undefined,
-  query: { enabled: Boolean(address) },
-});
-const { mutateAsync: writeContract } = useWriteContract();
+const connection = useConnection();
+const { data: pending, refetch } = useReadContract(
+  computed(() => ({
+    address: contractAddress,
+    abi: chargeMeshEscrowAbi,
+    functionName: "pendingWithdrawal",
+    args: connection.address.value ? [connection.address.value] : undefined,
+    query: { enabled: Boolean(connection.address.value) },
+  })),
+);
+const { mutateAsync: writeContractAsync } = useWriteContract();
 
 async function withdraw() {
+  const call = {
+    account: connection.address.value as Address,
+    address: contractAddress,
+    abi: chargeMeshEscrowAbi,
+    functionName: "withdraw",
+  } as const;
   try {
-    await writeContract({ address: contractAddress, abi: chargeMeshEscrowAbi, functionName: "withdraw" });
+    await publicClient.simulateContract(call);
+    const estimate = await publicClient.estimateContractGas(call);
+    await writeContractAsync({ ...call, gas: (estimate * 110n) / 100n });
     await refetch();
   } catch (err) {
     showError(decodeEscrowError(err)?.message ?? "Ödeme çekilemedi. Lütfen tekrar deneyin.");
   }
 }
 
-// pending !== undefined && pending > 0n →
-//   "Bekleyen ödemeniz var: {formatMon(pending)}" ve [Ödemeyi çek] düğmesi
+// pending.value !== undefined && pending.value > 0n →
+//   "Bekleyen ödemeniz var: {formatMon(pending.value)}" ve [Ödemeyi çek] düğmesi
 ```
 
 **Explorer bağlantıları.** `explorerTxUrl(chainId, txHash)` Monad testnet'te MonadVision bağlantısı döner. Anvil'de ve mock modda `null` döndüğü için bağlantı gösterilmez; istenirse hash düz metin olarak yazılabilir.

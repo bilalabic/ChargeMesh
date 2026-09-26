@@ -19,6 +19,7 @@ next-env.d.ts
 contracts/out/
 contracts/cache/
 contracts/broadcast/*/31337/
+contracts/deployments/31337.json
 contracts/broadcast/**/dry-run/
 
 # Logs and OS files

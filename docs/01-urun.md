@@ -20,34 +20,37 @@ Otoparklarda, ofislerde ve otellerde gün boyu boşta bekleyen AC şarj cihazlar
 | Rol | Kim | Ne yapar |
 | --- | --- | --- |
 | **Host** | Cihaz sahibi veya işletmecisi | Şarj noktasını tanımlar (bağlantı tipi, güç, erişim koşulu), uygun saat aralıklarını ve kapasitesini **Energy Slot** olarak yayınlar, gelen rezervasyonları görür ve karşılığında ödeme alır. |
-| **Driver** | Elektrikli araç sürücüsü | Gideceği yeri, varış ve ayrılış saatini, ihtiyaç duyduğu enerjiyi girer. Önerilen noktalardan birini seçip depozitoyla rezerve eder, noktaya varınca QR ile oturumu başlatır ve sonuç özetini görür. |
+| **Sürücü** (kodda `Driver`) | Elektrikli araç sürücüsü | Gideceği yeri, varış ve ayrılış saatini, ihtiyaç duyduğu enerjiyi girer. Önerilen noktalardan birini seçip depozitoyla rezerve eder, noktaya varınca QR ile oturumu başlatır ve sonuç özetini görür. |
 
 İlk hedef, erişimi yönetilebilen destinasyonlardaki cihazlardır: ofis, otel, apartman ve özel otoparklar. Ev tipi cihazlar sonraki sürümlerde değerlendirilecek.
 
 ## Sözlük
 
-Aşağıdaki terimler kodda, arayüzde ve dokümanlarda **aynen** kullanılır. Arayüz metinleri Türkçe olabilir; tip, tablo ve değişken adları İngilizce kalır.
+Aşağıdaki terimler kodda ve dokümanlarda **aynen** kullanılır. Tip, koleksiyon ve değişken adları İngilizce kalır. Arayüz metinlerinde ve belgelerin düz metninde "Arayüz karşılığı" sütunundaki ad kullanılır.
 
-| Terim | Kod karşılığı | Anlamı |
-| --- | --- | --- |
-| Charging Node | `ChargingNode` / `nodes` | Host'un tanımladığı fiziksel şarj noktası. Bir OCPP charge point ve bir konektöre karşılık gelir. |
-| Energy Slot | `EnergySlot` / `slots` | Bir node'un belirli bir zaman aralığında sunduğu kapasite: başlangıç, bitiş, en fazla enerji (Wh), kWh fiyatı. |
-| Charge Intent | `ChargeIntent` / `intents` | Sürücünün talebi: hedef konum, varış, ayrılış, istenen enerji, bağlantı tipi. |
-| Match | `MatchResult` | Bir intent için sıralanmış uygun slot önerisi. |
-| Reservation | `Reservation` / `reservations` | Onaylanmış eşleşme. Zincirde depozitoyla birlikte kaydedilir. |
-| Charging Session | `ChargingSession` / `sessions` | QR ile başlayan, OCPP üzerinden ölçülen gerçek şarj oturumu. |
-| Proof of Charge | `ProofOfCharge` | Oturum özetinin kanonik JSON'u ve bu JSON'un keccak256 hash'i. Hash zincire yazılır. |
-| Settlement | `settle` | Aktarılan enerjiye göre depozitonun Host'a ödenen ve Driver'a iade edilen kısımlara ayrılması. |
-| Settler | `settler` | Teklifleri imzalayan ve oturum sonucunu zincire yazan backend anahtarı. |
+| Terim | Kod karşılığı | Arayüz karşılığı | Anlamı |
+| --- | --- | --- | --- |
+| Host | `host` | Host | Şarj noktasını paylaşan ve karşılığında ödeme alan taraf. |
+| Driver | `driver` | Sürücü | Rezervasyon yapan, depozito yatıran ve şarj olan taraf. |
+| Charging Node | `ChargingNode` / `nodes` | Şarj noktası | Host'un tanımladığı fiziksel şarj noktası. Bir OCPP charge point ve bir konektöre karşılık gelir. |
+| Energy Slot | `EnergySlot` / `slots` | Energy Slot | Bir node'un belirli bir zaman aralığında sunduğu kapasite: başlangıç, bitiş, en fazla enerji (Wh), kWh fiyatı. |
+| Charge Intent | `ChargeIntent` / `intents` | Şarj talebi | Sürücünün talebi: hedef konum, varış, ayrılış, istenen enerji, bağlantı tipi. |
+| Match | `MatchResult` | Eşleşme | Bir intent için sıralanmış uygun slot önerisi. |
+| Reservation | `Reservation` / `reservations` | Rezervasyon | Onaylanmış eşleşme. Zincirde depozitoyla birlikte kaydedilir. |
+| Charging Session | `ChargingSession` / `sessions` | Şarj oturumu | QR ile başlayan, OCPP üzerinden ölçülen gerçek şarj oturumu. |
+| Proof of Charge | `ProofOfCharge` | Proof of Charge | Oturum özetinin kanonik JSON'u ve bu JSON'un keccak256 hash'i. Hash zincire yazılır. |
+| Settlement | `settle` | Hesaplaşma | Aktarılan enerjiye göre depozitonun Host'a ödenen ve Sürücü'ye iade edilen kısımlara ayrılması. |
+| Withdrawal | `pendingWithdrawal` / `withdraw()` | Bekleyen ödeme | Doğrudan gönderilemediği için sözleşmede bekleyen ödeme. Sahibi istediği zaman `withdraw()` ile çeker. |
+| Settler | `settler` | Settler | Teklifleri imzalayan ve oturum sonucunu zincire yazan backend anahtarı. |
 
 ## Temel akış
 
 1. **Host bir Charging Node ekler** ve kullanılabilir zaman aralığıyla kapasitesini içeren bir **Energy Slot** yayınlar.
-2. **Driver bir Charge Intent oluşturur:** hedef konum, varış, ayrılış ve istenen kWh.
+2. **Sürücü bir Charge Intent oluşturur:** hedef konum, varış, ayrılış ve istenen kWh.
 3. **Sistem slotları sıralar.** Bağlantı uyumu, erişim tipi, mesafe ve o zaman aralığında karşılanabilecek enerji dikkate alınır. Sıralama deterministiktir: aynı girdi her zaman aynı sonucu verir (bkz. [03-api.md](03-api.md#eşleştirme-algoritması)).
-4. **Driver seçimini onaylar.** Backend imzalı bir teklif (EIP-712 quote) üretir. Driver bu teklifi cüzdanıyla Monad testnet'teki sözleşmeye gönderir ve depozitoyu kilitler. Böylece rezervasyon zincire kaydedilmiş olur.
-5. **Driver noktaya varınca** cihazdaki QR kodu okutur ve oturumu başlatır.
-6. **OCPP simülatörü** oturumu ve sayaç verilerini backend'e iletir. Backend, talep edilen enerjiyle aktarılan enerjiyi karşılaştırır, Proof of Charge özetini oluşturur ve hash'ini `settle` çağrısıyla zincire yazar. Sözleşme aktarılan enerjinin bedelini Host'a öder, kalan depozitoyu Driver'a iade eder.
+4. **Sürücü seçimini onaylar.** Backend imzalı bir teklif (EIP-712 quote) üretir. Sürücü bu teklifi cüzdanıyla Monad testnet'teki sözleşmeye gönderir ve depozitoyu kilitler. Böylece rezervasyon zincire kaydedilmiş olur.
+5. **Sürücü noktaya varınca** oturumu QR ile başlatır. Hackathon demosunda telefon kullanılmaz: QR kodu Host ekranında görsel olarak durur, Sürücü aynı dizüstü bilgisayarda "Şarjı başlat" düğmesine basar (bkz. [06-demo-senaryosu.md](06-demo-senaryosu.md)).
+6. **OCPP simülatörü** oturumu ve sayaç verilerini backend'e iletir. Backend, talep edilen enerjiyle aktarılan enerjiyi karşılaştırır, Proof of Charge özetini oluşturur ve hash'ini `settle` çağrısıyla zincire yazar. Sözleşme aktarılan enerjinin bedelini Host'a gönderir, kalan depozitoyu da Sürücü'ye iade eder. Alıcılardan biri ödemeyi reddederse işlem geri alınmaz: Tutar alıcının çekilebilir bakiyesine (`pendingWithdrawal`) eklenir, alıcı da parasını istediği zaman `withdraw()` ile çeker (bkz. [04-akilli-sozlesme.md](04-akilli-sozlesme.md#ödeme-modeli)).
 
 ### Enerji rezervasyonu ne demek, ne demek değil?
 
@@ -74,11 +77,11 @@ Gizlilik kuralları:
 
 ### Yapılacaklar
 
-- İki rol (Host ve Driver) için sade bir web arayüzü
+- İki rol (Host ve Sürücü) için sade bir web arayüzü
 - Sanal bir cihaz ekleme ve slot yayınlama
 - Talep girme ve deterministik eşleştirme
 - Monad testnet üzerinde imzalı teklifle depozitolu rezervasyon
-- QR ile oturum başlatma
+- QR ile oturum başlatma (demoda tek dizüstü bilgisayar kullanılır; QR ekranda görsel olarak durur)
 - OCPP 1.6J simülasyonu (başlatma, periyodik sayaç, durdurma)
 - Proof of Charge özeti ve test ödemesinin gerçekleşen kullanıma göre sonuçlandırılması
 
