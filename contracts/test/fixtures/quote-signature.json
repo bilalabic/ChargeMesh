@@ -1,0 +1,19 @@
+{
+  "chainId": 31337,
+  "verifyingContract": "0x000000000000000000000000000000000000c0de",
+  "settler": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "quote": {
+    "reservationId": "0x74239d04acba62a37de3d64fb8cd6867d661071eb861ac60fa9b141a58a46326",
+    "slotRef": "0x44aaadafd79bb3979db3623f6821ed08142be303148811f17ac5ab1c685435c2",
+    "driver": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    "host": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+    "requestedWh": 20000,
+    "pricePerKwhWei": "10000000000000000",
+    "depositWei": "200000000000000000",
+    "startTime": 1800000000,
+    "endTime": 1800014400,
+    "quoteExpiry": 1799999000
+  },
+  "digest": "0xa4eea4088d959799071ee94a783f8767f1ad16d213e50053f06521a5730069f3",
+  "signature": "0xb7d55f9642e4f213c9eb1c8c1025ae2e6e146163606e48899e1b4cf5ddaca4c24eea4e7319c990bb7e05332a313317dd8d9d2a5c336d46bf1947f3a4cc81897d1b"
+}
