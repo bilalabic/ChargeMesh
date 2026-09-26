@@ -47,7 +47,7 @@ git worktree add ..\ChargeMesh-contracts -b feat/contracts
 
 - Her worktree'de `corepack pnpm install` ayrıca çalıştırılır.
 - Ajan (Claude Code veya Codex) ilgili worktree klasöründe başlatılır. Böylece alt klasördeki `AGENTS.md`/`CLAUDE.md` dosyaları otomatik yüklenir.
-- Aynı anda yalnızca API worktree'si PostgreSQL'e bağlanmalıdır. İki API aynı anda çalışacaksa ikincisi `PORT` ve `OCPP_PORT` değerlerini değiştirmelidir.
+- API worktree'leri aynı Atlas veritabanına eşzamanlı yazmamalıdır. Paralel API çalıştırılacaksa ayrı `MONGODB_DB_NAME`, `PORT` ve `OCPP_PORT` değerleri kullanılmalıdır.
 - `main` dalına doğrudan commit atılmaz. İşler küçük PR'larla `main` dalına birleştirilir.
 
 ## Commit ve PR kuralları

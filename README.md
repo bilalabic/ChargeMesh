@@ -59,7 +59,7 @@ ChargeMesh/
 ### Gereksinimler
 
 - Node.js 22 veya üzeri (corepack Node ile birlikte gelir)
-- Docker Desktop (PostgreSQL için)
+- MongoDB Atlas kümesi, veritabanı kullanıcısı ve API makinesine izin veren IP access list kaydı
 - WSL 2 + Ubuntu 24.04 içinde [Foundry](https://getfoundry.sh) (yalnızca sözleşme geliştirme için)
 - Tarayıcıda MetaMask ya da benzeri bir cüzdan, testnet MON için [Monad faucet](https://faucet.monad.xyz)
 
@@ -85,9 +85,8 @@ corepack pnpm dev:frontend          # http://localhost:3000
 API'yi ve simülatörü zincir olmadan çalıştırmak için:
 
 ```powershell
-corepack pnpm db:up            # PostgreSQL :5433
 Copy-Item backend/api/.env.example backend/api/.env      # CHAIN_MODE=mock
-corepack pnpm --filter @chargemesh/api db:migrate
+corepack pnpm --filter @chargemesh/api db:indexes        # Atlas koleksiyon indeksleri
 corepack pnpm dev:backend          # REST :4000, OCPP :9000
 corepack pnpm dev:sim          # ayrı bir terminalde
 ```
@@ -108,7 +107,7 @@ Yerel zincirle (Anvil) ve Monad testnet'le çalıştırma adımları için [cont
 | Katman | Seçim |
 | --- | --- |
 | Arayüz | Next.js 16, React 19, Tailwind CSS 4, wagmi 3, viem 2 |
-| Backend | Node.js, Fastify 5, Drizzle ORM, PostgreSQL 17 |
+| Backend | Node.js, Fastify 5, MongoDB Atlas, resmi MongoDB Node.js driver |
 | Şarj cihazı | OCPP 1.6J (`ocpp-rpc`) |
 | Zincir | Monad testnet (chainId 10143), Solidity 0.8.28, Foundry, OpenZeppelin 5 |
 | Ortak | TypeScript, zod 4, pnpm workspaces |

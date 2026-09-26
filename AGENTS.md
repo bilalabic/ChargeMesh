@@ -31,7 +31,8 @@ ChargeMesh, atıl AC şarj cihazlarının kapasitesini, sürücünün gideceği 
 - Foundry yalnızca WSL'de çalışır:
   `wsl.exe -d Ubuntu-24.04 -- bash -lc "cd /mnt/c/Users/bilal/projects/ChargeMesh/contracts && ~/.foundry/bin/forge test"`
   (Worktree'de çalışıyorsan yolu kendi klasörüne göre değiştir.)
-- PostgreSQL Docker'da çalışır: `corepack pnpm db:up` → `localhost:5433`.
+- Kalıcı veri MongoDB Atlas'ta tutulur. Bağlantı yalnızca `MONGODB_URI` ve `MONGODB_DB_NAME`
+  ortam değişkenlerinden okunur; URI ve kimlik bilgileri loglanmaz.
 
 ## Komutlar (kökten)
 

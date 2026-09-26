@@ -55,7 +55,7 @@ Bu senaryo ürünün temel vaadini gösterir: **Ödeme talebe göre değil, ger�
 
 ## Demo öncesi kontrol listesi
 
-- [ ] `docker compose up -d postgres` çalışıyor, migration'lar uygulandı.
+- [ ] MongoDB Atlas bağlantısı erişilebilir ve `db:indexes` başarıyla tamamlandı.
 - [ ] Sözleşme testnet'te deploy edildi, doğrulandı ve adresi `deployments.ts` dosyasında.
 - [ ] `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=true`, settler bakiyesi en az 0,2 MON.
 - [ ] API (`:4000`) ve OCPP (`:9000`) ayakta; simülatör bağlı, Host panelinde "Çevrimiçi" görünüyor.

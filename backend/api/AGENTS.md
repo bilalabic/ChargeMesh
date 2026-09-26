@@ -4,7 +4,7 @@ Kök `AGENTS.md` kuralları geçerlidir. Bu klasörün ve `backend/charger-sim` 
 
 ## Teknoloji
 
-Node.js 22+, TypeScript (ESM), Fastify 5, zod 4 (girdiler handler içinde shared şemalarla `parse` edilir; ayrı bir type provider kullanılmaz), Drizzle ORM + `postgres` sürücüsü, PostgreSQL 17 (Docker, `:5433`), viem 2, `ocpp-rpc`, Vitest. Geliştirme sırasında `tsx watch` kullanılır.
+Node.js 22+, TypeScript (ESM), Fastify 5, zod 4 (girdiler handler içinde shared şemalarla `parse` edilir; ayrı bir type provider kullanılmaz), MongoDB Atlas + resmi `mongodb` Node.js driver, viem 2, `ocpp-rpc`, Vitest. Geliştirme sırasında `tsx watch` kullanılır.
 
 ## Klasör düzeni
 
@@ -19,8 +19,11 @@ src/
     routes/           # system, nodes, slots, intents, reservations, sessions, demo
   domain/             # business rules; no Fastify/DB types leak in
   db/
-    schema.ts         # Drizzle tables
-    client.ts
+    types.ts          # collection document types
+    store.ts          # storage contract used by routes/domain
+    mongo.ts          # Atlas-backed store
+    memory.ts         # network-free tests
+    indexes.ts        # idempotent Atlas index bootstrap
   chain/
     index.ts          # ChainGateway interface
     mock.ts           # CHAIN_MODE=mock
@@ -29,7 +32,6 @@ src/
     server.ts         # ocpp-rpc RPCServer, handlers, charger registry
   sessions/
     events.ts         # in-process pub/sub for SSE
-drizzle/              # generated migrations (committed)
 ```
 
 ## Kurallar
@@ -39,16 +41,15 @@ drizzle/              # generated migrations (committed)
 - **Zincir erişimi yalnızca `ChainGateway` arayüzünden** yapılır. `CHAIN_MODE=mock` tüm akışı zincir olmadan çalıştırabilmelidir; testler bu modda koşar.
 - Eşleştirme için `rankMatches` (shared) çağrılır; algoritmayı yeniden yazma. Kimlikler `toOnchainReservationId`, `toSlotRef`, `toOcppIdTag`; tutarlar `depositFor` ve `computeSettlement`; hash `computeSessionHash` ile üretilir.
 - Teklif imzası: `SETTLER_PRIVATE_KEY` → `signTypedData(buildQuoteTypedData(quote, chainId, escrow))`. Sözleşme adresi `getDeployment(chainId)` fonksiyonundan okunur.
-- Slot tutma yarışları için `POST /reservations` işlemi tek bir DB transaction'ında ve slot satırı kilitlenerek (`SELECT … FOR UPDATE`) yapılır.
+- Slot tutma yarışları için `POST /reservations`, MongoDB transaction'ı içinde koşullu slot güncellemesi ve reservation insert ile atomik yapılır. Aynı transaction içinde paralel DB çağrısı çalıştırılmaz.
 - Özel alanlar (`addressLine`, `lat`, `lng`, `accessInstructions`) yalnızca `docs/03-api.md` içinde tanımlanan koşullarda döner. Loglara da yazılmaz.
-- Veritabanı: Para `numeric(78,0)`, enerji `integer`, zaman `timestamptz`. Migration'lar `drizzle-kit generate` ile üretilir ve commit edilir.
+- Veritabanı: UUID'ler string `_id`, para ondalık string, enerji tam sayı Wh, zaman BSON `Date` olarak tutulur. Gerekli benzersiz ve sorgu indeksleri `db:indexes` ile idempotent hazırlanır.
 - `settle` başarısız olursa rezervasyon `FAILED` olur ve yeniden denenebilir. Ağ hataları sessizce yutulmaz.
 
 ## Komutlar
 
 ```powershell
-corepack pnpm db:up                                   # kökten, PostgreSQL :5433
-corepack pnpm --filter @chargemesh/api db:migrate
+corepack pnpm --filter @chargemesh/api db:indexes     # Atlas indekslerini doğrula/oluştur
 corepack pnpm --filter @chargemesh/api dev            # :4000 + OCPP :9000
 corepack pnpm --filter @chargemesh/api typecheck
 corepack pnpm --filter @chargemesh/api lint

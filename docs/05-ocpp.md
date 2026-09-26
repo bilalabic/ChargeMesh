@@ -57,10 +57,10 @@ Sürüm olarak **OCPP 1.6J** (WebSocket üzerinden JSON) kullanıyoruz. En yayg�
 
 - `idTag = toOcppIdTag(reservation.id)` (20 karakter). `StartTransaction` içindeki `idTag` bu değerle rezervasyona bağlanır.
 - `transactionId`, backend'in ürettiği artan bir tam sayıdır ve `sessions.ocpp_transaction_id` alanına yazılır.
-- Gelen her `MeterValues` mesajı `meter_samples` tablosuna ham haliyle yazılır. `deliveredWh = son Energy.Active.Import.Register − meterStart` olarak hesaplanır.
+- Gelen her `MeterValues` mesajı `meterSamples` koleksiyonuna ham haliyle yazılır. `deliveredWh = son Energy.Active.Import.Register − meterStart` olarak hesaplanır.
 - `deliveredWh ≥ requestedWh` olduğunda backend `RemoteStopTransaction` gönderir.
 - `StopTransaction` geldiğinde: `deliveredWh = meterStop − meterStart` → Proof of Charge özeti → `settle()`.
-- Tüm ham OCPP çağrıları (yön, eylem, gövde, zaman) hata ayıklama için `ocpp_messages` tablosunda tutulur.
+- Tüm ham OCPP çağrıları (yön, eylem, gövde, zaman) hata ayıklama için `ocppMessages` koleksiyonunda tutulur.
 
 ## Simülatör (`backend/charger-sim`)
 

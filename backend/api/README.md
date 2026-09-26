@@ -4,14 +4,13 @@ ChargeMesh'in uygulama sunucusu. Şarj noktalarını, slotları ve talepleri sak
 
 ## Teknoloji
 
-Fastify 5, Drizzle ORM ve PostgreSQL 17, viem 2 (zincir), `ocpp-rpc` (OCPP 1.6J), zod 4 (doğrulama), Vitest.
+Fastify 5, MongoDB Atlas ve resmi MongoDB Node.js driver, viem 2 (zincir), `ocpp-rpc` (OCPP 1.6J), zod 4 (doğrulama), Vitest.
 
 ## Çalıştırma
 
 ```powershell
-corepack pnpm db:up                                   # kökten: PostgreSQL :5433
 Copy-Item .env.example .env
-corepack pnpm --filter @chargemesh/api db:migrate
+corepack pnpm --filter @chargemesh/api db:indexes
 corepack pnpm --filter @chargemesh/api dev
 ```
 
@@ -46,23 +45,21 @@ src/
 ├── config.ts       Ortam değişkenleri (zod ile doğrulanır)
 ├── http/           Hata biçimi, kimlik başlığı, route'lar
 ├── domain/         İş kuralları
-├── db/             Drizzle şeması ve bağlantı
+├── db/             Store sözleşmesi, Atlas ve bellek uygulamaları, indeksler
 ├── chain/          ChainGateway: mock ve viem uygulamaları
 ├── ocpp/           OCPP Central System
 └── sessions/       Canlı oturum olayları (SSE için)
-drizzle/            Üretilen migration'lar
 ```
 
 ## Veritabanı
 
-Şema `src/db/schema.ts` içindedir. Şema değişince:
+API, Atlas'a `MONGODB_URI` ile bağlanır ve `MONGODB_DB_NAME` veritabanını kullanır. URI gizlidir; loglanmaz veya commit edilmez. İlk çalıştırmadan önce indeksleri doğrulayın:
 
 ```powershell
-corepack pnpm --filter @chargemesh/api db:generate   # yeni migration üretir
-corepack pnpm --filter @chargemesh/api db:migrate    # uygular
+corepack pnpm --filter @chargemesh/api db:indexes
 ```
 
-Üretilen migration dosyaları commit edilir.
+Normal Vitest çalışması Atlas'a bağlanmaz; aynı store sözleşmesinin bellek uygulamasını kullanır.
 
 ## Komutlar
 
