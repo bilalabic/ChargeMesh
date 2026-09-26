@@ -45,6 +45,7 @@ export interface Store {
   ): Promise<ReservationDocument | null>;
   listReservationsByWallet(wallet: string, role: "driver" | "host"): Promise<ReservationDocument[]>;
   listReservationsByNode(nodeId: string): Promise<ReservationDocument[]>;
+  listReservationsForReconciliation(now: Date): Promise<ReservationDocument[]>;
 
   createSession(document: SessionDocument): Promise<SessionDocument>;
   findSession(id: string): Promise<SessionDocument | null>;
@@ -54,7 +55,7 @@ export interface Store {
   updateSession(id: string, patch: SessionPatch): Promise<SessionDocument | null>;
   nextOcppTransactionId(): Promise<number>;
 
-  insertMeterSample(document: MeterSampleDocument): Promise<void>;
+  insertMeterSample(document: MeterSampleDocument): Promise<boolean>;
   listMeterSamples(sessionId: string): Promise<MeterSampleDocument[]>;
   insertOcppMessage(document: OcppMessageDocument): Promise<void>;
 

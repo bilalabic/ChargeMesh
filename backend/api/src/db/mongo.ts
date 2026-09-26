@@ -254,6 +254,18 @@ export class MongoStore implements Store {
       .toArray();
   }
 
+  async listReservationsForReconciliation(now: Date): Promise<ReservationDocument[]> {
+    return this.collection<ReservationDocument>("reservations")
+      .find({
+        $or: [
+          { status: { $in: ["CONFIRMED", "ACTIVE", "COMPLETED"] } },
+          { status: "FAILED", $or: [{ nextRetryAt: null }, { nextRetryAt: { $lte: now } }] },
+        ],
+      })
+      .sort({ updatedAt: 1 })
+      .toArray();
+  }
+
   async createSession(document: SessionDocument): Promise<SessionDocument> {
     await this.collection<SessionDocument>("sessions").insertOne(document);
     return document;
@@ -293,8 +305,13 @@ export class MongoStore implements Store {
     return counter.value;
   }
 
-  async insertMeterSample(document: MeterSampleDocument): Promise<void> {
-    await this.collection<MeterSampleDocument>("meterSamples").insertOne(document);
+  async insertMeterSample(document: MeterSampleDocument): Promise<boolean> {
+    const result = await this.collection<MeterSampleDocument>("meterSamples").updateOne(
+      { sessionId: document.sessionId, sampledAt: document.sampledAt, energyWh: document.energyWh },
+      { $setOnInsert: document },
+      { upsert: true },
+    );
+    return result.upsertedCount === 1;
   }
 
   async listMeterSamples(sessionId: string): Promise<MeterSampleDocument[]> {
@@ -302,7 +319,11 @@ export class MongoStore implements Store {
   }
 
   async insertOcppMessage(document: OcppMessageDocument): Promise<void> {
-    await this.collection<OcppMessageDocument>("ocppMessages").insertOne(document);
+    await this.collection<OcppMessageDocument>("ocppMessages").updateOne(
+      { chargePointId: document.chargePointId, direction: document.direction, messageId: document.messageId },
+      { $setOnInsert: document },
+      { upsert: true },
+    );
   }
 
   async ensureIndexes(): Promise<void> {

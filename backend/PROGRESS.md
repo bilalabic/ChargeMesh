@@ -11,7 +11,7 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 | 5 · OCPP, oturum ve Proof of Charge | Tamamlandı | `feat(backend): complete OCPP charging sessions` | API ve sim: typecheck, lint, test geçti |
 | 6 · M1 uçtan uca kabul | Tamamlandı | `test(backend): cover mock demo workflow` | API ve sim: typecheck, lint, test geçti; Atlas smoke çalıştırılmadı |
 | 7 · M2 Anvil entegrasyonu | Tamamlandı | `test(backend): add anvil chain integration` | Mock testler geçti; Anvil deployment olmadığı için entegrasyon testi atlandı |
-| 8 · M3–M4 canlı mod ve kurtarma | Bekliyor | `fix(backend): harden settlement recovery and live mode` | mock/anvil; Monad işlemi ayrıca onay gerektirir |
+| 8 · M3–M4 canlı mod ve kurtarma | Tamamlandı | `fix(backend): harden settlement recovery and live mode` | Mock testler geçti; Atlas/Anvil/Monad dış kontrolleri çalıştırılmadı |
 
 ## Faz 1 · Mimari değişiklik protokolü
 
@@ -79,4 +79,16 @@ Bu dosya MongoDB Atlas tabanlı backend çalışmasının fazlarını, gerçek d
 - Transaction gönderildikten sonra receipt bekleme başarısız olursa hash'i taşıyan `SubmittedTransactionError` eklendi; start/settle hash'i reconciliation için session ve reservation kaydında korunuyor.
 - Receipt timeout sonrası settlement hash'inin kaybolmadığı MemoryStore testi geçti.
 - `@chargemesh/api`: typecheck ve lint geçti; normal pakette 27 test geçti, Atlas smoke ve 2 Anvil testi atlandı.
+- `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.
+
+## Faz 8 · M3–M4 canlı mod ve kurtarma
+
+- Startup sırasında portlar açılmadan önce ve ardından kontrollü aralıklarla çalışan reconciliation worker eklendi.
+- Yarım kalan start işlemleri zincir durumu `Active` olduğunda yeniden RemoteStart ile sürdürülüyor; ikinci kez `startSession` gönderilmiyor.
+- Başarısız settlement kayıtları `nextRetryAt` sonrasında tekrar deneniyor; zincirde zaten `Settled`, `Cancelled` veya `Expired` olan kayıtlar doğrudan uzlaştırılıyor.
+- `FAILED → SETTLED` geçişi ve receipt timeout sonrası hash tabanlı kurtarma test edildi.
+- Duplicate StartTransaction, MeterValues ve StopTransaction işleme; eşzamanlı stop çağrıları session bazlı seri yürütme ve benzersiz sample/message indeksleriyle idempotent hale getirildi.
+- Monad yapılandırması ve synced deployment ağ çağrısı/transaction göndermeden doğrulandı. Gerçek Monad işlemi gönderilmedi.
+- Gerçek Atlas URI'si ve chain 31337 deployment olmadığı için Atlas smoke ile Anvil entegrasyonu çalıştırılmadı; Monad üzerinde işlem kullanıcıdan ayrıca açık onay alınmadığı için çalıştırılmadı.
+- `@chargemesh/api`: typecheck ve lint geçti; 29 test geçti, Atlas smoke ve 2 Anvil testi atlandı.
 - `@chargemesh/charger-sim`: typecheck, lint ve 10 test geçti.

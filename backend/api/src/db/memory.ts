@@ -196,6 +196,19 @@ export class MemoryStore implements Store {
     );
   }
 
+  async listReservationsForReconciliation(now: Date): Promise<ReservationDocument[]> {
+    return copy(
+      [...this.reservations.values()]
+        .filter(
+          (reservation) =>
+            ["CONFIRMED", "ACTIVE", "COMPLETED"].includes(reservation.status) ||
+            (reservation.status === "FAILED" &&
+              (reservation.nextRetryAt === null || reservation.nextRetryAt <= now)),
+        )
+        .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime()),
+    );
+  }
+
   async createSession(document: SessionDocument): Promise<SessionDocument> {
     if ([...this.sessions.values()].some((session) => session.reservationId === document.reservationId)) {
       throw new Error(`Duplicate session reservationId ${document.reservationId}`);
@@ -235,8 +248,16 @@ export class MemoryStore implements Store {
     return this.transactionId;
   }
 
-  async insertMeterSample(document: MeterSampleDocument): Promise<void> {
+  async insertMeterSample(document: MeterSampleDocument): Promise<boolean> {
+    const duplicate = this.meterSamples.some(
+      (sample) =>
+        sample.sessionId === document.sessionId &&
+        sample.sampledAt.getTime() === document.sampledAt.getTime() &&
+        sample.energyWh === document.energyWh,
+    );
+    if (duplicate) return false;
     this.meterSamples.push(copy(document));
+    return true;
   }
 
   async listMeterSamples(sessionId: string): Promise<MeterSampleDocument[]> {

@@ -62,6 +62,8 @@ corepack pnpm --filter @chargemesh/api db:indexes
 Normal Vitest çalışması Atlas'a bağlanmaz; aynı store sözleşmesinin bellek uygulamasını kullanır.
 Opsiyonel smoke testi için yalnızca bu işe ayrılmış, kısıtlı bir Atlas kullanıcısının URI'sini `MONGODB_TEST_URI` olarak verin ve `corepack pnpm --filter @chargemesh/api test:atlas` çalıştırın. Test yalnızca benzersiz `chargemesh_smoke_` önekli kendi veritabanını oluşturur ve bu öneki doğruladıktan sonra siler.
 
+API, HTTP/OCPP portlarını açmadan önce yarım kalan zincir işlemlerini uzlaştırır ve bunu `RECONCILIATION_INTERVAL_MS` aralığıyla tekrarlar. Gönderilmiş start/settle transaction hash'leri receipt bekleme hatasında kaybolmaz; `FAILED` kayıtlar zincir durumu okunarak veya güvenli settlement retry ile `SETTLED` durumuna taşınır.
+
 ## Komutlar
 
 | Komut | Ne yapar |

@@ -169,6 +169,7 @@ Her uygulamanın klasöründe bir `.env.example` bulunur. Gerçek `.env` dosyala
 | backend | `RPC_URL` | `https://testnet-rpc.monad.xyz` | |
 | backend | `SETTLER_PRIVATE_KEY` | *(yalnızca testnet anahtarı)* | Teklif imzalar ve `startSession`/`settle` gönderir |
 | backend | `QUOTE_TTL_SECONDS` | `300` | |
+| backend | `RECONCILIATION_INTERVAL_MS` | `30000` | Yarım kalan start/settlement işlemlerini başlangıçta ve bu aralıkla uzlaştırır. |
 | backend | `DEMO_ALLOW_ANY_TIME` | `true` | |
 | charger-sim | `CS_URL` | `ws://localhost:9000/ocpp` | |
 | charger-sim | `CHARGE_POINT_ID` | `CM-DEMO-001` | |

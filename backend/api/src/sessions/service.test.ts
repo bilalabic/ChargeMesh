@@ -13,6 +13,7 @@ import { loadConfig, type AppConfigEnv } from "../config";
 import { MemoryStore } from "../db/memory";
 import { ChargerRegistry } from "../ocpp/server";
 import { SessionEventBus, type SessionEvent } from "./events";
+import { ReconciliationWorker } from "./reconciliation";
 import { ChargingSessionService, type OcppCommands } from "./service";
 
 const HOST = "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
@@ -103,33 +104,50 @@ describe("charging session lifecycle", () => {
     const published: SessionEvent[] = [];
     const unsubscribe = events.subscribe(document._id, (event) => published.push(event));
 
-    const transaction = await service.onStartTransaction({
+    const startInput = {
       chargePointId: document.chargePointId,
       connectorId: document.connectorId,
       idTag: document.ocppIdTag,
       meterStartWh: 1_000_000,
       timestamp: new Date(),
-    });
+    };
+    const startSpy = vi.spyOn(chain, "startSession");
+    const [transaction, duplicateStart] = await Promise.all([
+      service.onStartTransaction(startInput),
+      service.onStartTransaction(startInput),
+    ]);
     expect(transaction.accepted).toBe(true);
-    await service.onMeter({
+    expect(duplicateStart).toEqual(transaction);
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    const sampledAt = new Date();
+    const meterInput = {
       chargePointId: document.chargePointId,
       transactionId: transaction.transactionId,
-      sampledAt: new Date(),
+      sampledAt,
       energyWh: 1_000_000 + document.requestedWh,
       powerW: 7_400,
       raw: { meterValue: [] },
-    });
+    };
+    await service.onMeter(meterInput);
+    await service.onMeter(meterInput);
+    expect(await store.listMeterSamples(document._id)).toHaveLength(1);
     expect(commands.remoteStop).toHaveBeenCalledWith(document.chargePointId, transaction.transactionId);
     expect((await store.findSession(document._id))?.status).toBe("STOPPING");
 
-    const stopped = await service.onStopTransaction({
+    const stopInput = {
       chargePointId: document.chargePointId,
       transactionId: transaction.transactionId,
       meterStopWh: 1_000_000 + document.requestedWh,
       stoppedAt: new Date(),
       reason: "Remote",
-    });
-    expect(stopped).toBe(true);
+    };
+    const settleSpy = vi.spyOn(chain, "settle");
+    const stopped = await Promise.all([
+      service.onStopTransaction(stopInput),
+      service.onStopTransaction(stopInput),
+    ]);
+    expect(stopped).toEqual([true, true]);
+    expect(settleSpy).toHaveBeenCalledTimes(1);
     expect((await store.findSession(document._id))?.status).toBe("SETTLED");
     expect(published.some((event) => event.event === "meter")).toBe(true);
     expect(published.some((event) => event.event === "settled")).toBe(true);
@@ -163,7 +181,7 @@ describe("charging session lifecycle", () => {
     });
     expect(transaction.accepted).toBe(true);
     const submittedHash = `0x${"78".repeat(32)}` as `0x${string}`;
-    vi.spyOn(chain, "settle").mockRejectedValue(
+    const failedSettle = vi.spyOn(chain, "settle").mockRejectedValue(
       new SubmittedTransactionError("settle", submittedHash, new Error("receipt timeout")),
     );
     await service.onStopTransaction({
@@ -178,5 +196,48 @@ describe("charging session lifecycle", () => {
     expect(failedReservation?.status).toBe("FAILED");
     expect(failedReservation?.settleTxHash).toBe(submittedHash);
     expect(failedReservation?.nextRetryAt).not.toBeNull();
+
+    failedSettle.mockRestore();
+    await store.updateReservation(reservation.reservation.id, { nextRetryAt: new Date(0), updatedAt: new Date() });
+    const reconciliation = new ReconciliationWorker(store, chain, service, events, 5_000);
+    await reconciliation.runOnce();
+    expect((await store.findReservation(reservation.reservation.id))?.status).toBe("SETTLED");
+    expect((await store.findSession(session._id))?.status).toBe("SETTLED");
+  });
+
+  it("resumes a half-finished start after the submitted transaction becomes active", async () => {
+    const reservation = await confirmedReservation();
+    const session = await service.start(DRIVER, {
+      chargePointId: seed.node.ocppChargePointId,
+      connectorId: seed.node.ocppConnectorId,
+      reservationId: reservation.reservation.id,
+    });
+    const submittedHash = `0x${"9a".repeat(32)}` as `0x${string}`;
+    const failedStart = vi.spyOn(chain, "startSession").mockRejectedValue(
+      new SubmittedTransactionError("startSession", submittedHash, new Error("receipt timeout")),
+    );
+    const startInput = {
+      chargePointId: session.chargePointId,
+      connectorId: session.connectorId,
+      idTag: session.ocppIdTag,
+      meterStartWh: 1_000_000,
+      timestamp: new Date(),
+    };
+    const first = await service.onStartTransaction(startInput);
+    expect(first.accepted).toBe(false);
+    failedStart.mockRestore();
+    await chain.startSession(reservation.reservation.onchainId as `0x${string}`);
+    await store.updateReservation(reservation.reservation.id, { nextRetryAt: new Date(0), updatedAt: new Date() });
+
+    const reconciliation = new ReconciliationWorker(store, chain, service, events, 5_000);
+    await reconciliation.runOnce();
+    expect((await store.findSession(session._id))?.status).toBe("STARTING");
+    expect((await store.findReservation(reservation.reservation.id))?.status).toBe("ACTIVE");
+
+    const noDuplicateStart = vi.spyOn(chain, "startSession");
+    const resumed = await service.onStartTransaction(startInput);
+    expect(resumed).toEqual({ transactionId: first.transactionId, accepted: true });
+    expect(noDuplicateStart).not.toHaveBeenCalled();
+    expect((await store.findSession(session._id))?.status).toBe("CHARGING");
   });
 });

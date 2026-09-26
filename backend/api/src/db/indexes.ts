@@ -42,9 +42,18 @@ export async function ensureMongoIndexes(db: Db): Promise<void> {
   ]);
   await db.collection<MeterSampleDocument>("meterSamples").createIndexes([
     { key: { sessionId: 1, sampledAt: 1 }, name: "meter_samples_session_sampled_idx" },
+    {
+      key: { sessionId: 1, sampledAt: 1, energyWh: 1 },
+      name: "meter_samples_session_time_energy_uq",
+      unique: true,
+    },
   ]);
   await db.collection<OcppMessageDocument>("ocppMessages").createIndexes([
     { key: { chargePointId: 1, createdAt: -1 }, name: "ocpp_messages_cp_created_idx" },
-    { key: { messageId: 1 }, name: "ocpp_messages_message_id_idx" },
+    {
+      key: { chargePointId: 1, direction: 1, messageId: 1 },
+      name: "ocpp_messages_cp_direction_message_uq",
+      unique: true,
+    },
   ]);
 }

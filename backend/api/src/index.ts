@@ -8,6 +8,7 @@ import { ConfigError, loadConfig, type AppConfigEnv } from "./config";
 import { MongoStore } from "./db/mongo";
 import { ChargerRegistry, OcppCentralSystem } from "./ocpp/server";
 import { SessionEventBus } from "./sessions/events";
+import { ReconciliationWorker } from "./sessions/reconciliation";
 import { ChargingSessionService } from "./sessions/service";
 
 function loggerOptions(config: AppConfigEnv) {
@@ -47,12 +48,22 @@ async function main(): Promise<void> {
   sessions.setCommands(ocpp);
   const app = await buildApp({ config, chain, chargers, events, sessions, ocpp, store, logger: loggerOptions(config) });
   ocpp.setLogger(app.log.child({ component: "ocpp" }));
+  const reconciliation = new ReconciliationWorker(
+    store,
+    chain,
+    sessions,
+    events,
+    config.reconciliationIntervalMs,
+    app.log.child({ component: "reconciliation" }),
+  );
 
   // Never log the key; only the derived settler address.
   app.log.info(
     { chainMode: config.chainMode, chainId: config.chainId, settler: chain.settlerAddress, contract: chain.contractAddress },
     "Chain gateway ready",
   );
+  await reconciliation.runOnce();
+  reconciliation.start();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -62,6 +73,7 @@ async function main(): Promise<void> {
     const force = setTimeout(() => process.exit(1), 10_000);
     force.unref();
     try {
+      reconciliation.stop();
       await ocpp.stop();
       await app.close();
       await store.close();

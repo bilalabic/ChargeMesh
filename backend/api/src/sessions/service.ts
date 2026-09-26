@@ -8,7 +8,7 @@ import {
   type StartSessionRequest,
 } from "@chargemesh/shared";
 import type { Hex } from "viem";
-import { isSubmittedTransactionError, type ChainGateway } from "../chain";
+import { isSubmittedTransactionError, type ChainGateway, type SettleResult } from "../chain";
 import type { AppConfigEnv } from "../config";
 import type { Store } from "../db/store";
 import type { MeterSampleDocument, ReservationDocument, SessionDocument } from "../db/types";
@@ -48,6 +48,7 @@ export interface StopTransactionInput {
 
 export class ChargingSessionService {
   private commands: OcppCommands | null = null;
+  private readonly operations = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly store: Store,
@@ -58,6 +59,17 @@ export class ChargingSessionService {
 
   setCommands(commands: OcppCommands): void {
     this.commands = commands;
+  }
+
+  private async serialize<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.operations.get(sessionId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    this.operations.set(sessionId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.operations.get(sessionId) === current) this.operations.delete(sessionId);
+    }
   }
 
   async start(wallet: string, input: StartSessionRequest): Promise<SessionDocument> {
@@ -132,145 +144,229 @@ export class ChargingSessionService {
     return session;
   }
 
-  async onStartTransaction(input: StartTransactionInput): Promise<{ transactionId: number; accepted: boolean }> {
-    const session = await this.store.findSessionByIdTag(input.idTag);
-    if (!session || session.status !== "STARTING" || session.chargePointId !== input.chargePointId || session.connectorId !== input.connectorId) {
-      return { transactionId: 0, accepted: false };
-    }
-    const reservation = await this.requireReservation(session.reservationId);
-    const transactionId = await this.store.nextOcppTransactionId();
+  async resumeRemoteStart(session: SessionDocument): Promise<boolean> {
+    if (!this.commands?.isConnected(session.chargePointId)) return false;
+    const starting = await this.store.updateSession(session._id, {
+      status: "STARTING",
+      stopReason: null,
+      updatedAt: new Date(),
+    });
+    if (!starting) return false;
     try {
-      const startTxHash = await this.chain.startSession(reservation.onchainId as Hex);
-      const now = new Date();
-      const updated = await this.store.updateSession(session._id, {
-        status: "CHARGING",
+      const status = await this.commands.remoteStart(session.chargePointId, {
+        connectorId: session.connectorId,
+        idTag: session.ocppIdTag,
+      });
+      if (status === "Accepted") return true;
+    } catch {
+      // Reconciliation will retry after the next controlled interval.
+    }
+    await this.store.updateSession(session._id, { status: "FAILED", updatedAt: new Date() });
+    return false;
+  }
+
+  async onStartTransaction(input: StartTransactionInput): Promise<{ transactionId: number; accepted: boolean }> {
+    const initial = await this.store.findSessionByIdTag(input.idTag);
+    if (!initial) return { transactionId: 0, accepted: false };
+    return this.serialize(initial._id, async () => {
+      const session = await this.store.findSessionByIdTag(input.idTag);
+      if (!session || session.chargePointId !== input.chargePointId || session.connectorId !== input.connectorId) {
+        return { transactionId: 0, accepted: false };
+      }
+      if (session.ocppTransactionId !== null && ["CHARGING", "STOPPING", "COMPLETED", "SETTLING", "SETTLED"].includes(session.status)) {
+        return { transactionId: session.ocppTransactionId, accepted: true };
+      }
+      if (session.status !== "STARTING") return { transactionId: 0, accepted: false };
+      const reservation = await this.requireReservation(session.reservationId);
+      const transactionId = session.ocppTransactionId ?? (await this.store.nextOcppTransactionId());
+      await this.store.updateSession(session._id, {
         ocppTransactionId: transactionId,
         meterStartWh: input.meterStartWh,
         latestMeterWh: input.meterStartWh,
         startedAt: input.timestamp,
-        startTxHash,
-        updatedAt: now,
+        updatedAt: new Date(),
       });
-      await this.store.updateReservation(reservation._id, {
-        status: "ACTIVE",
-        startTxHash,
-        failureReason: null,
-        updatedAt: now,
-      });
-      if (updated) this.events.publish(updated._id, "session.updated", this.toView(updated));
-      return { transactionId, accepted: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isSubmittedTransactionError(err)) {
-        await this.store.updateSession(session._id, { startTxHash: err.txHash, updatedAt: new Date() });
-        await this.store.updateReservation(reservation._id, { startTxHash: err.txHash, updatedAt: new Date() });
+      try {
+        const startTxHash =
+          reservation.status === "ACTIVE" && session.startTxHash
+            ? (session.startTxHash as Hex)
+            : await this.chain.startSession(reservation.onchainId as Hex);
+        const now = new Date();
+        const updated = await this.store.updateSession(session._id, {
+          status: "CHARGING",
+          ocppTransactionId: transactionId,
+          meterStartWh: input.meterStartWh,
+          latestMeterWh: input.meterStartWh,
+          startedAt: input.timestamp,
+          startTxHash,
+          updatedAt: now,
+        });
+        await this.store.updateReservation(reservation._id, {
+          status: "ACTIVE",
+          startTxHash,
+          failureReason: null,
+          updatedAt: now,
+        });
+        if (updated) this.events.publish(updated._id, "session.updated", this.toView(updated));
+        return { transactionId, accepted: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (isSubmittedTransactionError(err)) {
+          await this.store.updateSession(session._id, { startTxHash: err.txHash, updatedAt: new Date() });
+          await this.store.updateReservation(reservation._id, { startTxHash: err.txHash, updatedAt: new Date() });
+        }
+        await this.failSession(session, reservation, message);
+        return { transactionId, accepted: false };
       }
-      await this.failSession(session, reservation, message);
-      return { transactionId, accepted: false };
-    }
+    });
   }
 
   async onMeter(input: MeterInput): Promise<void> {
-    const session = await this.store.findSessionByTransaction(input.transactionId);
-    if (!session || !["CHARGING", "STOPPING"].includes(session.status) || session.chargePointId !== input.chargePointId) return;
-    const meterStartWh = session.meterStartWh ?? input.energyWh;
-    const deliveredWh = Math.max(0, input.energyWh - meterStartWh);
-    const sample: MeterSampleDocument = {
-      sessionId: session._id,
-      ocppTransactionId: input.transactionId,
-      sampledAt: input.sampledAt,
-      energyWh: input.energyWh,
-      powerW: input.powerW,
-      raw: input.raw,
-      receivedAt: new Date(),
-    };
-    await this.store.insertMeterSample(sample);
-    const shouldStop = deliveredWh >= session.requestedWh && !session.stopRequested;
-    const updated = await this.store.updateSession(session._id, {
-      status: shouldStop ? "STOPPING" : session.status,
-      latestMeterWh: input.energyWh,
-      deliveredWh,
-      powerW: input.powerW,
-      stopRequested: session.stopRequested || shouldStop,
-      updatedAt: new Date(),
-    });
-    if (!updated) return;
-    this.events.publish(updated._id, "meter", {
-      sessionId: updated._id,
-      timestamp: input.sampledAt.toISOString(),
-      energyWh: input.energyWh,
-      deliveredWh,
-      powerW: input.powerW,
-    });
-    this.events.publish(updated._id, "session.updated", this.toView(updated));
-    if (shouldStop && this.commands) {
-      let status: "Accepted" | "Rejected" = "Rejected";
-      try {
-        status = await this.commands.remoteStop(updated.chargePointId, input.transactionId);
-      } catch {
-        // The meter sample remains valid; a later sample or manual stop can retry.
+    const initial = await this.store.findSessionByTransaction(input.transactionId);
+    if (!initial) return;
+    await this.serialize(initial._id, async () => {
+      const session = await this.store.findSessionByTransaction(input.transactionId);
+      if (!session || !["CHARGING", "STOPPING"].includes(session.status) || session.chargePointId !== input.chargePointId) return;
+      const meterStartWh = session.meterStartWh ?? input.energyWh;
+      const deliveredWh = Math.max(0, input.energyWh - meterStartWh);
+      const sample: MeterSampleDocument = {
+        sessionId: session._id,
+        ocppTransactionId: input.transactionId,
+        sampledAt: input.sampledAt,
+        energyWh: input.energyWh,
+        powerW: input.powerW,
+        raw: input.raw,
+        receivedAt: new Date(),
+      };
+      if (!(await this.store.insertMeterSample(sample))) return;
+      const shouldStop = deliveredWh >= session.requestedWh && !session.stopRequested;
+      const updated = await this.store.updateSession(session._id, {
+        status: shouldStop ? "STOPPING" : session.status,
+        latestMeterWh: input.energyWh,
+        deliveredWh,
+        powerW: input.powerW,
+        stopRequested: session.stopRequested || shouldStop,
+        updatedAt: new Date(),
+      });
+      if (!updated) return;
+      this.events.publish(updated._id, "meter", {
+        sessionId: updated._id,
+        timestamp: input.sampledAt.toISOString(),
+        energyWh: input.energyWh,
+        deliveredWh,
+        powerW: input.powerW,
+      });
+      this.events.publish(updated._id, "session.updated", this.toView(updated));
+      if (shouldStop && this.commands) {
+        let status: "Accepted" | "Rejected" = "Rejected";
+        try {
+          status = await this.commands.remoteStop(updated.chargePointId, input.transactionId);
+        } catch {
+          // The meter sample remains valid; a later sample or manual stop can retry.
+        }
+        if (status !== "Accepted") {
+          const resumed = await this.store.updateSession(updated._id, {
+            status: "CHARGING",
+            stopRequested: false,
+            updatedAt: new Date(),
+          });
+          this.events.publish(updated._id, "error", {
+            code: "REMOTE_STOP_REJECTED",
+            message: "Charge point rejected the automatic stop command",
+          });
+          if (resumed) this.events.publish(resumed._id, "session.updated", this.toView(resumed));
+        }
       }
-      if (status !== "Accepted") {
-        const resumed = await this.store.updateSession(updated._id, {
-          status: "CHARGING",
-          stopRequested: false,
-          updatedAt: new Date(),
-        });
-        this.events.publish(updated._id, "error", {
-          code: "REMOTE_STOP_REJECTED",
-          message: "Charge point rejected the automatic stop command",
-        });
-        if (resumed) this.events.publish(resumed._id, "session.updated", this.toView(resumed));
-      }
-    }
+    });
   }
 
   async requestStop(session: SessionDocument): Promise<SessionDocument> {
-    if (session.status === "STOPPING" || session.status === "COMPLETED" || session.status === "SETTLING" || session.status === "SETTLED") {
-      return session;
-    }
-    if (session.status !== "CHARGING" || session.ocppTransactionId === null) {
-      throw new ApiError("INVALID_STATE", `Cannot stop a ${session.status} session`);
-    }
-    if (!this.commands) throw new ApiError("CHARGER_OFFLINE", "OCPP server is unavailable");
-    let status: "Accepted" | "Rejected";
-    try {
-      status = await this.commands.remoteStop(session.chargePointId, session.ocppTransactionId);
-    } catch {
-      throw new ApiError("CHARGER_OFFLINE", "Charge point disconnected before the stop command");
-    }
-    if (status !== "Accepted") throw new ApiError("INVALID_STATE", "Charge point rejected the stop command");
-    const updated = await this.store.updateSession(session._id, {
-      status: "STOPPING",
-      stopRequested: true,
-      updatedAt: new Date(),
+    return this.serialize(session._id, async () => {
+      const current = await this.store.findSession(session._id);
+      if (!current) throw new ApiError("NOT_FOUND", "Charging session not found");
+      if (["STOPPING", "COMPLETED", "SETTLING", "SETTLED"].includes(current.status)) return current;
+      if (current.status !== "CHARGING" || current.ocppTransactionId === null) {
+        throw new ApiError("INVALID_STATE", `Cannot stop a ${current.status} session`);
+      }
+      if (!this.commands) throw new ApiError("CHARGER_OFFLINE", "OCPP server is unavailable");
+      let status: "Accepted" | "Rejected";
+      try {
+        status = await this.commands.remoteStop(current.chargePointId, current.ocppTransactionId);
+      } catch {
+        throw new ApiError("CHARGER_OFFLINE", "Charge point disconnected before the stop command");
+      }
+      if (status !== "Accepted") throw new ApiError("INVALID_STATE", "Charge point rejected the stop command");
+      const updated = await this.store.updateSession(current._id, {
+        status: "STOPPING",
+        stopRequested: true,
+        updatedAt: new Date(),
+      });
+      if (!updated) throw new ApiError("NOT_FOUND", "Charging session not found");
+      this.events.publish(updated._id, "session.updated", this.toView(updated));
+      return updated;
     });
-    if (!updated) throw new ApiError("NOT_FOUND", "Charging session not found");
-    this.events.publish(updated._id, "session.updated", this.toView(updated));
-    return updated;
   }
 
   async onStopTransaction(input: StopTransactionInput): Promise<boolean> {
-    const session = await this.store.findSessionByTransaction(input.transactionId);
-    if (!session || session.chargePointId !== input.chargePointId || session.meterStartWh === null) return false;
-    const reservation = await this.requireReservation(session.reservationId);
-    const deliveredWh = Math.max(0, input.meterStopWh - session.meterStartWh);
-    const now = new Date();
-    const completed = await this.store.updateSession(session._id, {
-      status: "COMPLETED",
-      latestMeterWh: input.meterStopWh,
-      meterStopWh: input.meterStopWh,
-      deliveredWh,
-      powerW: 0,
-      stoppedAt: input.stoppedAt,
-      stopReason: input.reason,
-      updatedAt: now,
+    const initial = await this.store.findSessionByTransaction(input.transactionId);
+    if (!initial) return false;
+    return this.serialize(initial._id, async () => {
+      const session = await this.store.findSessionByTransaction(input.transactionId);
+      if (!session || session.chargePointId !== input.chargePointId || session.meterStartWh === null) return false;
+      if (["COMPLETED", "SETTLING", "SETTLED", "FAILED"].includes(session.status)) return true;
+      const reservation = await this.requireReservation(session.reservationId);
+      const deliveredWh = Math.max(0, input.meterStopWh - session.meterStartWh);
+      const now = new Date();
+      const completed = await this.store.updateSession(session._id, {
+        status: "COMPLETED",
+        latestMeterWh: input.meterStopWh,
+        meterStopWh: input.meterStopWh,
+        deliveredWh,
+        powerW: 0,
+        stoppedAt: input.stoppedAt,
+        stopReason: input.reason,
+        updatedAt: now,
+      });
+      await this.store.updateReservation(reservation._id, { status: "COMPLETED", updatedAt: now });
+      if (!completed) return false;
+      this.events.publish(completed._id, "session.updated", this.toView(completed));
+      await this.settle(completed, reservation);
+      return true;
     });
-    await this.store.updateReservation(reservation._id, { status: "COMPLETED", updatedAt: now });
-    if (!completed) return false;
-    this.events.publish(completed._id, "session.updated", this.toView(completed));
-    await this.settle(completed, reservation);
-    return true;
+  }
+
+  async retrySettlement(reservation: ReservationDocument): Promise<boolean> {
+    const initial = await this.store.findSessionByReservation(reservation._id);
+    if (!initial?.sessionHash) return false;
+    return this.serialize(initial._id, async () => {
+      const session = await this.store.findSession(initial._id);
+      const currentReservation = await this.store.findReservation(reservation._id);
+      if (!session?.sessionHash || !currentReservation) return false;
+      if (session.status === "SETTLED" || currentReservation.status === "SETTLED") return true;
+      try {
+        const result = await this.chain.settle(
+          currentReservation.onchainId as Hex,
+          session.deliveredWh,
+          session.sessionHash as Hex,
+        );
+        await this.applySettlementResult(session, currentReservation, result);
+        return true;
+      } catch (err) {
+        if (isSubmittedTransactionError(err)) {
+          await this.store.updateSession(session._id, { settleTxHash: err.txHash, updatedAt: new Date() });
+          await this.store.updateReservation(currentReservation._id, {
+            settleTxHash: err.txHash,
+            updatedAt: new Date(),
+          });
+        }
+        await this.failSession(
+          session,
+          currentReservation,
+          err instanceof Error ? err.message : String(err),
+        );
+        return false;
+      }
+    });
   }
 
   toView(session: SessionDocument) {
@@ -369,35 +465,7 @@ export class ChargingSessionService {
     });
     try {
       const result = await this.chain.settle(reservation.onchainId as Hex, session.deliveredWh, sessionHash);
-      const settledAt = new Date();
-      const settledSession = await this.store.updateSession(session._id, {
-        status: "SETTLED",
-        settleTxHash: result.txHash,
-        updatedAt: settledAt,
-      });
-      await this.store.updateReservation(reservation._id, {
-        status: "SETTLED",
-        settleTxHash: result.txHash,
-        settledDeliveredWh: result.deliveredWh,
-        billableWh: result.billableWh,
-        hostAmountWei: result.hostAmountWei.toString(),
-        refundWei: result.refundWei.toString(),
-        sessionHash: result.sessionHash,
-        failureReason: null,
-        updatedAt: settledAt,
-      });
-      if (settledSession) this.events.publish(settledSession._id, "session.updated", this.toView(settledSession));
-      this.events.publish(session._id, "settled", {
-        sessionId: session._id,
-        reservationId: reservation._id,
-        settlement: {
-          deliveredWh: result.deliveredWh,
-          billableWh: result.billableWh,
-          hostAmountWei: result.hostAmountWei.toString(),
-          refundWei: result.refundWei.toString(),
-          sessionHash: result.sessionHash,
-        },
-      });
+      await this.applySettlementResult(session, reservation, result);
     } catch (err) {
       if (isSubmittedTransactionError(err)) {
         await this.store.updateSession(session._id, { settleTxHash: err.txHash, updatedAt: new Date() });
@@ -405,6 +473,44 @@ export class ChargingSessionService {
       }
       await this.failSession(session, reservation, err instanceof Error ? err.message : String(err));
     }
+  }
+
+  private async applySettlementResult(
+    session: SessionDocument,
+    reservation: ReservationDocument,
+    result: SettleResult,
+  ): Promise<void> {
+    const settledAt = new Date();
+    const settledSession = await this.store.updateSession(session._id, {
+      status: "SETTLED",
+      settleTxHash: result.txHash,
+      sessionHash: result.sessionHash,
+      updatedAt: settledAt,
+    });
+    await this.store.updateReservation(reservation._id, {
+      status: "SETTLED",
+      settleTxHash: result.txHash,
+      settledDeliveredWh: result.deliveredWh,
+      billableWh: result.billableWh,
+      hostAmountWei: result.hostAmountWei.toString(),
+      refundWei: result.refundWei.toString(),
+      sessionHash: result.sessionHash,
+      failureReason: null,
+      nextRetryAt: null,
+      updatedAt: settledAt,
+    });
+    if (settledSession) this.events.publish(settledSession._id, "session.updated", this.toView(settledSession));
+    this.events.publish(session._id, "settled", {
+      sessionId: session._id,
+      reservationId: reservation._id,
+      settlement: {
+        deliveredWh: result.deliveredWh,
+        billableWh: result.billableWh,
+        hostAmountWei: result.hostAmountWei.toString(),
+        refundWei: result.refundWei.toString(),
+        sessionHash: result.sessionHash,
+      },
+    });
   }
 
   private async failSession(session: SessionDocument, reservation: ReservationDocument, message: string): Promise<void> {

@@ -28,6 +28,7 @@ const EnvSchema = z.object({
     z.string().regex(/^0x[0-9a-fA-F]{64}$/, "SETTLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex"),
   ),
   QUOTE_TTL_SECONDS: z.coerce.number().int().min(30).max(3_600).default(300),
+  RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
   DEMO_ALLOW_ANY_TIME: optionalString(BooleanFlag),
 });
 
@@ -43,6 +44,7 @@ export interface AppConfigEnv {
   rpcUrl: string | null;
   settlerPrivateKey: `0x${string}` | null;
   quoteTtlSeconds: number;
+  reconciliationIntervalMs: number;
   demoAllowAnyTime: boolean;
 }
 
@@ -93,6 +95,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
     rpcUrl: e.RPC_URL ?? defaultRpc ?? null,
     settlerPrivateKey: (e.SETTLER_PRIVATE_KEY as `0x${string}` | undefined) ?? null,
     quoteTtlSeconds: e.QUOTE_TTL_SECONDS,
+    reconciliationIntervalMs: e.RECONCILIATION_INTERVAL_MS,
     // Local dev defaults to true (avoids clock skew during demos); production defaults to false.
     demoAllowAnyTime: e.DEMO_ALLOW_ANY_TIME ?? e.NODE_ENV !== "production",
   };
