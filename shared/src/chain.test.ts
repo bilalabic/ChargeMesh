@@ -17,6 +17,7 @@ import {
   decodeEscrowError,
   ESCROW_ERROR_MESSAGES_TR,
   findReservationCreated,
+  getDeployment,
   getEscrowEventsForReservation,
   OnchainStatus,
   onchainStatusName,
@@ -26,7 +27,10 @@ import {
   type EscrowErrorName,
 } from "./index";
 
-const ESCROW: Address = "0x978b36423D76F24D3066e7B46bb84d38821C13F3";
+// Use the synced testnet deployment so these tests survive redeploys.
+const TESTNET = getDeployment(10143);
+if (!TESTNET) throw new Error("chain 10143 deployment missing; run chain:sync");
+const ESCROW: Address = TESTNET.escrow;
 const OTHER: Address = "0x1111111111111111111111111111111111111111";
 
 const abiErrors = chargeMeshEscrowAbi.filter((x) => x.type === "error");
@@ -224,7 +228,7 @@ describe("escrow events", () => {
     const events = await getEscrowEventsForReservation(client as never, { escrow: ESCROW, reservationId: RES_ID });
     expect(events.map((e) => e.eventName)).toEqual(["ReservationCreated"]);
     expect(calls).toHaveLength(5);
-    expect(calls.every((c) => c.fromBlock === 65831173n)).toBe(true);
+    expect(calls.every((c) => c.fromBlock === TESTNET.deployBlock)).toBe(true);
     expect(calls[0]?.args).toEqual({ reservationId: RES_ID });
   });
 });
