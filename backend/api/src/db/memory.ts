@@ -169,6 +169,11 @@ export class MemoryStore implements Store {
     if (reopenSlot) {
       const slot = this.slots.get(updated.slotId);
       if (slot) this.slots.set(slot._id, { ...slot, status: "OPEN", heldUntil: null, updatedAt: now });
+    } else if (["CONFIRMED", "ACTIVE", "COMPLETED", "SETTLED"].includes(updated.status)) {
+      const slot = this.slots.get(updated.slotId);
+      if (slot && (slot.status === "OPEN" || slot.status === "HELD")) {
+        this.slots.set(slot._id, { ...slot, status: "RESERVED", heldUntil: null, updatedAt: now });
+      }
     }
     return copy(updated);
   }

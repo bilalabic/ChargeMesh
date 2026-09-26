@@ -2,12 +2,10 @@ import { randomUUID } from "node:crypto";
 import {
   CreateIntentRequest,
   MatchesResponse,
-  rankMatches,
-  type MatchCandidate,
 } from "@chargemesh/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { toChargeIntent, toEnergySlot, toPublicNode } from "../../domain";
+import { findMatches, toChargeIntent } from "../../domain";
 import type { IntentDocument } from "../../db/types";
 import { assertOwner, requireWallet } from "../auth";
 import { ApiError } from "../errors";
@@ -62,24 +60,10 @@ export function intentRoutes(deps: RouteDeps): FastifyPluginAsync {
       assertOwner(wallet, intent.driverAddress);
       const now = new Date();
       await deps.store.releaseExpiredHolds(now);
-      const candidates: MatchCandidate[] = [];
-      for (const slot of await deps.store.listMatchableSlots(now)) {
-        const node = await deps.store.findNode(slot.nodeId);
-        if (!node) continue;
-        candidates.push({
-          slot: toEnergySlot(slot),
-          node: {
-            ...toPublicNode(node, deps.chargers.isConnected(node.ocppChargePointId)),
-            lat: node.lat,
-            lng: node.lng,
-          },
-          holdExpiresAt: slot.heldUntil?.toISOString() ?? null,
-        });
-      }
       return MatchesResponse.parse({
         intentId,
         generatedAt: now.toISOString(),
-        matches: rankMatches(toChargeIntent(intent), candidates, now),
+        matches: await findMatches(deps.store, deps.chargers, intentId, now),
       });
     });
   };

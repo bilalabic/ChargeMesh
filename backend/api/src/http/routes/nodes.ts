@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { CreateNodeRequest, CreateSlotRequest, EnergySlot, toSlotRef } from "@chargemesh/shared";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { nodeOnline, toEnergySlot, toPrivateNode, toPublicNode } from "../../domain";
+import { nodeOnline, toEnergySlot, toPrivateNode, toPublicNode, toReservation } from "../../domain";
 import type { NodeDocument, SlotDocument } from "../../db/types";
 import { assertOwner, optionalWallet, requireWallet } from "../auth";
-import { ApiError, notImplemented } from "../errors";
+import { ApiError } from "../errors";
 import type { RouteDeps } from "./deps";
 
 const IdParams = z.object({ nodeId: z.uuid() });
@@ -103,6 +103,14 @@ export function nodeRoutes(deps: RouteDeps): FastifyPluginAsync {
       return (await deps.store.listSlotsByNode(nodeId)).map(toEnergySlot);
     });
 
-    app.get("/nodes/:nodeId/reservations", async (_request, reply) => notImplemented(reply));
+    app.get("/nodes/:nodeId/reservations", async (request) => {
+      const wallet = requireWallet(request);
+      const { nodeId } = IdParams.parse(request.params);
+      const node = await deps.store.findNode(nodeId);
+      if (!node) throw new ApiError("NOT_FOUND", "Charging node not found");
+      assertOwner(wallet, node.hostAddress);
+      const reservations = await deps.store.listReservationsByNode(nodeId);
+      return Promise.all(reservations.map((item) => toReservation(deps.store, item, wallet, deps.chargers)));
+    });
   };
 }

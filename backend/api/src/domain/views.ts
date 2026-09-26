@@ -3,9 +3,13 @@ import {
   ChargingNode,
   EnergySlot,
   PublicChargingNode,
+  Reservation,
   type ChargerStatus,
 } from "@chargemesh/shared";
 import type { IntentDocument, NodeDocument, SlotDocument } from "../db/types";
+import type { ReservationDocument } from "../db/types";
+import type { Store } from "../db/store";
+import type { ChargerRegistry } from "../ocpp/server";
 
 export function nodeOnline(node: NodeDocument, chargers: readonly ChargerStatus[]): boolean {
   return chargers.some((charger) => charger.chargePointId === node.ocppChargePointId && charger.connected);
@@ -65,5 +69,73 @@ export function toChargeIntent(intent: IntentDocument) {
     connectorType: intent.connectorType,
     acceptedAccessTypes: intent.acceptedAccessTypes,
     createdAt: intent.createdAt.toISOString(),
+  });
+}
+
+const ACCESS_STATUSES = new Set(["CONFIRMED", "ACTIVE", "COMPLETED", "SETTLED"]);
+
+export async function toReservation(
+  store: Store,
+  reservation: ReservationDocument,
+  viewer: string,
+  chargers: ChargerRegistry,
+) {
+  const slot = await store.findSlot(reservation.slotId);
+  if (!slot) throw new Error(`Reservation ${reservation._id} references a missing slot`);
+  const node = await store.findNode(slot.nodeId);
+  if (!node) throw new Error(`Reservation ${reservation._id} references a missing node`);
+  const session = await store.findSessionByReservation(reservation._id);
+  const maySeeAccess =
+    viewer === reservation.driverAddress && ACCESS_STATUSES.has(reservation.status);
+
+  return Reservation.parse({
+    id: reservation._id,
+    onchainId: reservation.onchainId,
+    intentId: reservation.intentId,
+    slotId: reservation.slotId,
+    driverAddress: reservation.driverAddress,
+    hostAddress: reservation.hostAddress,
+    status: reservation.status,
+    requestedWh: reservation.requestedWh,
+    pricePerKwhWei: reservation.pricePerKwhWei,
+    depositWei: reservation.depositWei,
+    window: {
+      startsAt: reservation.windowStartsAt.toISOString(),
+      endsAt: reservation.windowEndsAt.toISOString(),
+    },
+    holdExpiresAt: reservation.holdExpiresAt.toISOString(),
+    node: toPublicNode(node, chargers.isConnected(node.ocppChargePointId)),
+    access: maySeeAccess
+      ? {
+          addressLine: node.addressLine,
+          lat: node.lat,
+          lng: node.lng,
+          accessInstructions: node.accessInstructions,
+        }
+      : null,
+    sessionId: session?._id ?? null,
+    txs: {
+      reserve: reservation.reserveTxHash,
+      start: reservation.startTxHash,
+      settle: reservation.settleTxHash,
+      cancel: reservation.cancelTxHash,
+    },
+    settlement:
+      reservation.status === "SETTLED" &&
+      reservation.settledDeliveredWh !== null &&
+      reservation.billableWh !== null &&
+      reservation.hostAmountWei !== null &&
+      reservation.refundWei !== null &&
+      reservation.sessionHash !== null
+        ? {
+            deliveredWh: reservation.settledDeliveredWh,
+            billableWh: reservation.billableWh,
+            hostAmountWei: reservation.hostAmountWei,
+            refundWei: reservation.refundWei,
+            sessionHash: reservation.sessionHash,
+          }
+        : null,
+    createdAt: reservation.createdAt.toISOString(),
+    updatedAt: reservation.updatedAt.toISOString(),
   });
 }

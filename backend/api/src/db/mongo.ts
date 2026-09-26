@@ -227,6 +227,12 @@ export class MongoStore implements Store {
             { $set: { status: "OPEN", heldUntil: null, updatedAt: now } },
             { session },
           );
+        } else if (result && ["CONFIRMED", "ACTIVE", "COMPLETED", "SETTLED"].includes(result.status)) {
+          await this.collection<SlotDocument>("slots").updateOne(
+            { _id: result.slotId, status: { $in: ["OPEN", "HELD"] } },
+            { $set: { status: "RESERVED", heldUntil: null, updatedAt: now } },
+            { session },
+          );
         }
       }, transactionOptions);
       return result;

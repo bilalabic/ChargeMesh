@@ -3,3 +3,4 @@
  * building, session lifecycle and settlement. Keep Fastify and MongoDB types out of here.
  */
 export * from "./views";
+export * from "./matching";
