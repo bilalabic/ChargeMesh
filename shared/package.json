@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "chain:sync": "node scripts/chain-sync.mjs",
-    "fixture:quote": "tsx scripts/gen-quote-fixture.ts"
+    "fixture:quote": "tsx scripts/gen-quote-fixture.ts",
+    "e2e:anvil": "tsx scripts/anvil-e2e.ts"
   },
   "dependencies": {
     "viem": "^2.56.9",

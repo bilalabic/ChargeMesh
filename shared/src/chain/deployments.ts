@@ -2,4 +2,10 @@
 import type { Deployment } from "./types";
 
 export const deployments: Partial<Record<number, Deployment>> = {
+  10143: {
+    chainId: 10143,
+    escrow: "0x978b36423D76F24D3066e7B46bb84d38821C13F3",
+    settler: "0x10562C789bB833c1930cdc7115D4fC0C4D32BA73",
+    deployBlock: 65831173n,
+  },
 };
