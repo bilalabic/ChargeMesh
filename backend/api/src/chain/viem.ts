@@ -6,12 +6,13 @@ import {
   anvilLocal,
   buildQuoteTypedData,
   chargeMeshEscrowAbi,
+  FinalityTimeoutError,
   getDeployment,
   monadTestnet,
   type ReservationQuote,
+  waitForFinalized,
 } from "@chargemesh/shared";
 import {
-  WaitForTransactionReceiptTimeoutError,
   createPublicClient,
   createWalletClient,
   http,
@@ -58,9 +59,47 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
   const walletClient = createWalletClient({ chain, transport, account });
   const timeout = opts.receiptTimeoutMs ?? 60_000;
 
+  // A single settler may receive concurrent session completions. Keep nonce
+  // allocation and broadcast atomic; refresh from the pending pool after a
+  // broadcast failure so a rejected tx does not permanently consume a nonce.
+  let writeQueue: Promise<void> = Promise.resolve();
+  let nextNonce: number | undefined;
+  async function writeSerialized<T>(write: (nonce: number) => Promise<T>): Promise<T> {
+    const previous = writeQueue;
+    let release!: () => void;
+    writeQueue = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      nextNonce ??= await publicClient.getTransactionCount({ address: account.address, blockTag: "pending" });
+      const nonce = nextNonce;
+      const result = await write(nonce);
+      nextNonce = nonce + 1;
+      return result;
+    } catch (err) {
+      nextNonce = undefined;
+      throw err;
+    } finally {
+      release();
+    }
+  }
+
+  async function estimateWithMargin(
+    functionName: "startSession" | "settle",
+    args: readonly [Hex] | readonly [Hex, number, Hex],
+  ): Promise<bigint> {
+    const estimate = await publicClient.estimateContractGas({
+      account,
+      address: escrow,
+      abi: chargeMeshEscrowAbi,
+      functionName,
+      args,
+    } as never);
+    return (estimate * 110n + 99n) / 100n;
+  }
+
   async function waitSuccess(hash: Hex, action: "startSession" | "settle"): Promise<TransactionReceipt> {
     try {
-      const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout });
+      const receipt = await waitForFinalized(publicClient, { hash, timeoutMs: timeout });
       if (receipt.status !== "success") {
         throw new Error(`${action} reverted`);
       }
@@ -83,9 +122,9 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
     async verifyReserveTx(txHash: Hex, onchainId: Hex): Promise<ReserveTxVerification> {
       let receipt: TransactionReceipt;
       try {
-        receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout });
+        receipt = await waitForFinalized(publicClient, { hash: txHash, timeoutMs: timeout });
       } catch (err) {
-        if (err instanceof WaitForTransactionReceiptTimeoutError) {
+        if (err instanceof FinalityTimeoutError) {
           return { ok: false, reason: "Transaction receipt not found" };
         }
         throw err;
@@ -115,7 +154,8 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
         functionName: "startSession",
         args: [onchainId],
       });
-      const hash = await walletClient.writeContract(request);
+      const gas = await estimateWithMargin("startSession", [onchainId]);
+      const hash = await writeSerialized((nonce) => walletClient.writeContract({ ...request, gas, nonce }));
       await waitSuccess(hash, "startSession");
       return hash;
     },
@@ -128,7 +168,8 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
         functionName: "settle",
         args: [onchainId, deliveredWh, sessionHash],
       });
-      const hash = await walletClient.writeContract(request);
+      const gas = await estimateWithMargin("settle", [onchainId, deliveredWh, sessionHash]);
+      const hash = await writeSerialized((nonce) => walletClient.writeContract({ ...request, gas, nonce }));
       const receipt = await waitSuccess(hash, "settle");
       const settled = parseEventLogs({
         abi: chargeMeshEscrowAbi,
