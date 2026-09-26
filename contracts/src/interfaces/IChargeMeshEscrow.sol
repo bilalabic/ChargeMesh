@@ -69,6 +69,9 @@ interface IChargeMeshEscrow {
     event ReservationCancelled(bytes32 indexed reservationId, uint128 refundWei);
     event ReservationExpired(bytes32 indexed reservationId, uint128 refundWei);
     event SettlerUpdated(address indexed previousSettler, address indexed newSettler);
+    /// @notice A push payment was rejected by the recipient and credited for {withdraw} instead.
+    event PaymentDeferred(address indexed account, uint256 amount);
+    event Withdrawn(address indexed account, uint256 amount);
 
     // ---------- Errors ----------
 
@@ -86,6 +89,8 @@ interface IChargeMeshEscrow {
     error ZeroSessionHash();
     error TransferFailed();
     error ZeroAddress();
+    error NothingToWithdraw();
+    error RenounceDisabled();
 
     // ---------- Driver ----------
 
@@ -103,6 +108,9 @@ interface IChargeMeshEscrow {
 
     function expire(bytes32 reservationId) external;
 
+    /// @notice Pulls payments that could not be pushed (see {PaymentDeferred}).
+    function withdraw() external;
+
     // ---------- Owner ----------
 
     function setSettler(address newSettler) external;
@@ -114,6 +122,8 @@ interface IChargeMeshEscrow {
     function isSlotTaken(bytes32 slotRef) external view returns (bool);
 
     function settler() external view returns (address);
+
+    function pendingWithdrawal(address account) external view returns (uint256);
 
     function hashQuote(ReservationQuote calldata quote) external view returns (bytes32);
 

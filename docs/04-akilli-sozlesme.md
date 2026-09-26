@@ -20,6 +20,9 @@ Konum, adres, erişim bilgisi, kişi veya araç bilgisi ve ham sayaç verisi sö
 - Driver, settler'ın imzaladığı bir teklif olmadan rezervasyon açamaz. Bu sayede fiyat, Host adresi, enerji miktarı ve zaman penceresi backend'in onayladığı değerlerle sınırlı kalır.
 - Oturum sonucunu settler bildirir. Bu bir **güven varsayımıdır**: Sözleşme, sayaç verisinin doğruluğunu kanıtlayamaz; yalnızca beyan edilen sonucu ve bu sonucun hash'ini kayda geçirir. Settler'ın kötüye kullanım alanı sınırlıdır: En fazla `depositWei` kadar tutarı Host'a yönlendirebilir.
 - Backend çökerse sürücünün parası kilitli kalmaz. `expire()` çağrısı herkese açıktır ve süre dolduğunda depozitoyu iade eder.
+- Hiçbir taraf diğerinin ödemesini engelleyemez. Alıcı ödemeyi reddederse tutar kaybolmaz, `pendingWithdrawal` hanesine yazılır ve sahibi bunu `withdraw()` ile çeker (bkz. [Ödeme modeli](#ödeme-modeli)).
+- Settler anahtarı ele geçirilirse zarar, sözleşmede kilitli depozitolarla sınırlıdır ve para yalnızca teklifte yazan Host'a gidebilir. Owner `setSettler` ile anahtarı değiştirdiğinde, eski anahtarla imzalanmış ama henüz kullanılmamış tüm teklifler de geçersiz olur.
+- Settler `startSession` çağrısını `startTime` öncesinde de yapabilir. Bu durumda sürücü artık `cancel` edemez. Sözleşme buna izin verir; zaman kontrolü backend'de yapılır (`[startsAt − 15 dk, endsAt]`, bkz. `docs/03-api.md`).
 
 ## Tipler
 
@@ -78,7 +81,10 @@ TypeScript karşılığı `shared/src/chain/eip712.ts` dosyasındadır (`reserva
 | `settle(bytes32 id, uint32 deliveredWh, bytes32 sessionHash)` | Settler | Durum `Active` · `sessionHash != 0` | `Settled`, Host'a `hostAmount`, Driver'a `refund` gönderilir, `ReservationSettled` |
 | `cancel(bytes32 id)` | Driver | Durum `Reserved` · `block.timestamp < startTime` | `Cancelled`, depozitonun tamamı iade edilir, slot serbest kalır, `ReservationCancelled` |
 | `expire(bytes32 id)` | Herkes | (`Reserved` ve `block.timestamp > endTime`) **veya** (`Active` ve `block.timestamp > endTime + SETTLEMENT_GRACE`) | `Expired`, depozitonun tamamı Driver'a iade edilir, slot serbest kalır, `ReservationExpired` |
+| `withdraw()` | Bekleyen alacağı olan herkes | `pendingWithdrawal(msg.sender) > 0`, aksi halde `NothingToWithdraw` | Alacak sıfırlanır, tamamı gönderilir, `Withdrawn`. Gönderim başarısız olursa `TransferFailed` ile revert eder ve alacak korunur. |
 | `setSettler(address)` | Owner | `address != 0` | `SettlerUpdated` |
+| `renounceOwnership()` | Owner | Her zaman `RenounceDisabled` | Kapalıdır; owner'sız bir sözleşmede settler bir daha değiştirilemezdi. |
+| `pendingWithdrawal(address)` | view | | Hesabın çekilmeyi bekleyen alacağı (wei) |
 | `getReservation(bytes32)` | view | | `Reservation` |
 | `isSlotTaken(bytes32)` | view | | `bool` |
 | `settler()` | view | | `address` |
@@ -93,7 +99,15 @@ hostAmount  = min(billableWh * pricePerKwhWei / 1000, depositWei)   // aşağı 
 refund      = depositWei - hostAmount
 ```
 
-`settle` çağrısında Host'a ve Driver'a native MON gönderilir (push). Durum değişikliği transferlerden **önce** yapılır (checks-effects-interactions) ve fonksiyon `nonReentrant` korumasına sahiptir. Transfer başarısız olursa işlem revert eder. Hackathon sürümünde, cüzdanların EOA olduğu varsayıldığı için pull-payment modeli kullanılmaz.
+### Ödeme modeli
+
+`settle`, `cancel` ve `expire` çağrılarında ödemeler önce doğrudan gönderilir (push). Durum değişikliği gönderimden **önce** yapılır (checks-effects-interactions) ve tüm fonksiyonlar `nonReentrant` korumasına sahiptir.
+
+Gönderim 100.000 gaz sınırıyla ve dönüş verisi kopyalanmadan yapılır. Alıcı ödemeyi reddederse (kodlu bir cüzdan, EIP-7702 ile yetkilendirilmiş bir EOA veya kasıtlı olarak revert eden bir sözleşme) işlem **geri alınmaz**. Tutar alıcının `pendingWithdrawal` hanesine yazılır, `PaymentDeferred` olayı yayılır ve alıcı parasını daha sonra `withdraw()` ile çeker.
+
+Bu model neden gerekli? Salt push modelinde, iadeyi reddeden bir sürücü `settle` çağrısını tamamen engelleyebilir, ardından `SETTLEMENT_GRACE` sonunda `expire` ile depozitonun tamamını geri alabilirdi. Yani şarj bedava olurdu. Yuvarlama nedeniyle iade çoğu zaman en az 1 wei olduğundan bu saldırı gerçekçidir. "Gönder, olmazsa alacak yaz" modeli bu yolu kapatır: Host'un ödemesi, sürücünün cüzdanı ne yaparsa yapsın gerçekleşir.
+
+Frontend ve backend, `pendingWithdrawal(adres) > 0` olduğunda kullanıcıya "Bekleyen ödemeniz var" uyarısı ve `withdraw()` düğmesi gösterir.
 
 ## Olaylar
 
@@ -111,11 +125,13 @@ event ReservationSettled(
 event ReservationCancelled(bytes32 indexed reservationId, uint128 refundWei);
 event ReservationExpired(bytes32 indexed reservationId, uint128 refundWei);
 event SettlerUpdated(address indexed previousSettler, address indexed newSettler);
+event PaymentDeferred(address indexed account, uint256 amount);
+event Withdrawn(address indexed account, uint256 amount);
 ```
 
 ## Hatalar
 
-`NotDriver()`, `NotSettler()`, `InvalidQuote()`, `QuoteExpired()`, `InvalidSignature()`, `IncorrectDeposit()`, `ReservationExists()`, `SlotAlreadyTaken()`, `InvalidStatus(Status current)`, `TooLate()`, `TooEarly()`, `ZeroSessionHash()`, `TransferFailed()`, `ZeroAddress()`.
+`NotDriver()`, `NotSettler()`, `InvalidQuote()`, `QuoteExpired()`, `InvalidSignature()`, `IncorrectDeposit()`, `ReservationExists()`, `SlotAlreadyTaken()`, `InvalidStatus(Status current)`, `TooLate()`, `TooEarly()`, `ZeroSessionHash()`, `TransferFailed()` (yalnızca `withdraw`), `ZeroAddress()`, `NothingToWithdraw()`, `RenounceDisabled()`.
 
 Frontend, bu hataları ABI üzerinden çözümleyip kullanıcıya Türkçe mesajla gösterir.
 
@@ -153,13 +169,15 @@ Blockchain ekibi en az şu Foundry testlerini yazar:
 - `startSession` ve `settle`: tam teslim, kısmi teslim (`delivered < requested`), fazla teslim (`delivered > requested`) ve `delivered = 0` durumları. Bakiyeler kuruşu kuruşuna doğrulanır.
 - `cancel` ve `expire` için zaman sınırları (`vm.warp`)
 - Reentrancy: Host adresi kötü niyetli bir sözleşme olduğunda `settle` yeniden giriş yapamaz.
+- Ödeme reddi: Ödemeyi reddeden, sonsuz döngüye giren veya yeniden girmeye çalışan bir Host ya da Driver, diğer tarafın ödemesini engelleyemez. Tutar `pendingWithdrawal` hanesine yazılır ve `withdraw()` ile çekilebilir.
+- `withdraw`: `NothingToWithdraw`, başarılı çekim, çift çekim denemesi.
 - **EIP-712 uyumu:** `shared` ile üretilen örnek bir imza (sabit anahtar, sabit teklif, `test/fixtures/quote-signature.json`) sözleşme tarafından doğrulanmalıdır. Bu test, TypeScript ile Solidity tanımlarının birbirinden ayrışmasını önler.
-- Fuzz: Rastgele `requestedWh`, `deliveredWh` ve `pricePerKwhWei` değerlerinde `hostAmount + refund == deposit` her zaman sağlanmalıdır.
+- Fuzz: Rastgele `requestedWh`, `deliveredWh` ve `pricePerKwhWei` değerlerinde `hostAmount + refund == deposit` her zaman sağlanmalıdır. Ödemesi ertelenen alıcılar olduğunda da sözleşme bakiyesi, açık depozitolar ile bekleyen alacakların toplamına eşit kalmalıdır.
 
 ## Deploy ve adres yayını
 
 1. **Yerel:** WSL'de `anvil` çalıştırılır, ardından `forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast` komutuyla deploy yapılır.
-2. **Testnet:** `--rpc-url https://testnet-rpc.monad.xyz` kullanılır. Doğrulama komutu: `forge verify-contract <adres> ChargeMeshEscrow --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`
+2. **Testnet:** `--rpc-url https://testnet-rpc.monad.xyz` kullanılır. Deploy betiği adresi simülasyon aşamasında yazar. Bu yüzden `chain:sync` öncesinde `cast code <adres> --rpc-url …` ile adreste gerçekten kod olduğu doğrulanmalıdır. Doğrulama komutu: `forge verify-contract <adres> ChargeMeshEscrow --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`
 3. Deploy betiği, adresi ve blok numarasını `contracts/deployments/<chainId>.json` dosyasına yazar (`{ "chainId", "escrow", "settler", "deployBlock" }`).
 4. Ardından Windows tarafında `corepack pnpm --filter @chargemesh/shared chain:sync` çalıştırılır. Bu komut `contracts/out/` altındaki ABI'yi `shared/src/chain/abi.ts`, deploy JSON'larını da `shared/src/chain/deployments.ts` dosyasına yazar. Üretilen dosyalar elle düzenlenmez.
 5. Adres değişikliği tek başına bir commit olur: `chore(contracts): deploy escrow to monad testnet`.

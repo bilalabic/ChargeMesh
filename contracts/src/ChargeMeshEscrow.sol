@@ -13,19 +13,21 @@ import {IChargeMeshEscrow} from "./interfaces/IChargeMeshEscrow.sol";
 /// @author ChargeMesh blockchain team
 /// @notice Locks a driver's deposit for a settler-signed charging reservation and splits it
 ///         between host and driver based on the delivered energy. Spec: docs/04-akilli-sozlesme.md.
-/// @dev M0 skeleton: ownership, settler management, storage layout, views and EIP-712 quote
-///      hashing/verification are complete. The business functions (`reserve`, `startSession`,
-///      `settle`, `cancel`, `expire`) revert with {NotImplemented} until M1.
+/// @dev Check order and errors follow the "Hangi durumda hangi hata?" table of the spec.
+///      Settlement math is byte-for-byte identical to shared/src/units.ts.
 ///      Not upgradeable; no fees, pause or token support (out of scope).
 contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, ReentrancyGuard {
-    /// @notice Raised by business functions that are not implemented yet (M0 only).
-    error NotImplemented();
-
     // ---------- Constants ----------
 
     /// @notice Time after `endTime` during which an `Active` reservation can still be settled
     ///         before anyone may `expire` it.
     uint64 public constant SETTLEMENT_GRACE = 1 days;
+
+    uint256 internal constant WH_PER_KWH = 1000;
+
+    /// @dev Gas forwarded on push payments. Enough for EOAs and common smart wallets; a recipient
+    ///      that reverts or runs out of gas is credited in {pendingWithdrawal} instead (docs/04, M-1).
+    uint256 internal constant PUSH_GAS_LIMIT = 100_000;
 
     /// @dev keccak256 of the EIP-712 type string. Must match
     ///      shared/src/chain/eip712.ts (RESERVATION_QUOTE_TYPESTRING) character for character.
@@ -41,8 +43,11 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     /// @dev reservationId => reservation.
     mapping(bytes32 reservationId => Reservation) internal reservations;
 
-    /// @dev slotRef => true while a reservation holds the slot.
+    /// @dev slotRef => true while a reservation holds the slot (stays true after settlement).
     mapping(bytes32 slotRef => bool) internal slotTaken;
+
+    /// @dev account => amount whose push payment failed; claimable via {withdraw}.
+    mapping(address account => uint256) internal pendingWithdrawals;
 
     // ---------- Modifiers ----------
 
@@ -64,71 +69,147 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     // ---------- Driver ----------
 
     /// @inheritdoc IChargeMeshEscrow
-    function reserve(ReservationQuote calldata, bytes calldata) external payable nonReentrant {
-        // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant already applied) checks in this order:
-        //  - msg.sender == quote.driver                                   else NotDriver
-        //  - block.timestamp <= quote.quoteExpiry                         else QuoteExpired
-        //  - quote.startTime < quote.endTime && quote.requestedWh > 0     else InvalidQuote
-        //  - quote.depositWei == ceilDiv(requestedWh * pricePerKwhWei, 1000) else IncorrectDeposit
-        //  - msg.value == quote.depositWei                                else IncorrectDeposit
-        //  - _verifyQuoteSigner(quote, signature) (signer == settler)     else InvalidSignature
-        //  - reservations[id].status == None                              else ReservationExists
-        //  - !slotTaken[quote.slotRef]                                    else SlotAlreadyTaken
-        //  Effects: store Reservation{status: Reserved}, slotTaken[slotRef] = true, emit ReservationCreated.
-        _revertNotImplemented();
+    function reserve(ReservationQuote calldata quote, bytes calldata signature) external payable nonReentrant {
+        if (msg.sender != quote.driver) revert NotDriver();
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp > quote.quoteExpiry) revert QuoteExpired();
+        if (quote.startTime >= quote.endTime || quote.requestedWh == 0 || quote.host == address(0)) {
+            revert InvalidQuote();
+        }
+        if (quote.depositWei != _depositFor(quote.requestedWh, quote.pricePerKwhWei) || msg.value != quote.depositWei) {
+            revert IncorrectDeposit();
+        }
+        _verifyQuoteSigner(quote, signature);
+        if (reservations[quote.reservationId].status != Status.None) revert ReservationExists();
+        if (slotTaken[quote.slotRef]) revert SlotAlreadyTaken();
+
+        reservations[quote.reservationId] = Reservation({
+            slotRef: quote.slotRef,
+            driver: quote.driver,
+            host: quote.host,
+            requestedWh: quote.requestedWh,
+            deliveredWh: 0,
+            pricePerKwhWei: quote.pricePerKwhWei,
+            depositWei: quote.depositWei,
+            startTime: quote.startTime,
+            endTime: quote.endTime,
+            status: Status.Reserved,
+            sessionHash: bytes32(0)
+        });
+        slotTaken[quote.slotRef] = true;
+
+        // The only external call before this event is the ecrecover precompile (staticcall).
+        // forge-lint: disable-next-item(reentrancy-events)
+        emit ReservationCreated(
+            quote.reservationId,
+            quote.slotRef,
+            quote.driver,
+            quote.host,
+            quote.requestedWh,
+            quote.pricePerKwhWei,
+            quote.depositWei,
+            quote.startTime,
+            quote.endTime
+        );
     }
 
     /// @inheritdoc IChargeMeshEscrow
-    function cancel(bytes32) external nonReentrant {
-        // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant already applied) checks:
-        //  - status == Reserved                       else InvalidStatus(status)
-        //  - msg.sender == driver                     else NotDriver
-        //  - block.timestamp < startTime              else TooLate
-        //  Effects: status = Cancelled, slotTaken[slotRef] = false, emit ReservationCancelled(id, depositWei).
-        //  Interaction: refund full depositWei to driver (revert TransferFailed on failure).
-        _revertNotImplemented();
+    function cancel(bytes32 reservationId) external nonReentrant {
+        Reservation storage r = reservations[reservationId];
+        if (r.status != Status.Reserved) revert InvalidStatus(r.status);
+        if (msg.sender != r.driver) revert NotDriver();
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp >= r.startTime) revert TooLate();
+
+        r.status = Status.Cancelled;
+        slotTaken[r.slotRef] = false;
+        uint128 refund = r.depositWei;
+        emit ReservationCancelled(reservationId, refund);
+
+        _payOrDefer(r.driver, refund);
     }
 
     // ---------- Settler ----------
 
     /// @inheritdoc IChargeMeshEscrow
-    function startSession(bytes32) external nonReentrant onlySettler {
-        // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant + onlySettler already applied) checks:
-        //  - status == Reserved                       else InvalidStatus(status)
-        //  - block.timestamp <= endTime               else TooLate
-        //  Effects: status = Active, emit SessionStarted(id, uint64(block.timestamp)).
-        _revertNotImplemented();
+    function startSession(bytes32 reservationId) external nonReentrant onlySettler {
+        Reservation storage r = reservations[reservationId];
+        if (r.status != Status.Reserved) revert InvalidStatus(r.status);
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp > r.endTime) revert TooLate();
+
+        r.status = Status.Active;
+        // uint64 seconds cannot overflow for billions of years.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        emit SessionStarted(reservationId, uint64(block.timestamp));
     }
 
     /// @inheritdoc IChargeMeshEscrow
-    function settle(bytes32, uint32, bytes32) external nonReentrant onlySettler {
-        // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant + onlySettler already applied) checks:
-        //  - status == Active                         else InvalidStatus(status)
-        //  - sessionHash != 0                         else ZeroSessionHash
-        //  Math (identical to shared/src/units.ts, rounds down):
-        //    billableWh = min(deliveredWh, requestedWh)
-        //    hostAmount = min(billableWh * pricePerKwhWei / 1000, depositWei)
-        //    refund     = depositWei - hostAmount
-        //  Effects (before transfers): status = Settled, deliveredWh, sessionHash,
-        //    slotTaken[slotRef] = false (TBD, see open question), emit ReservationSettled.
-        //  Interactions: push hostAmount to host and refund to driver (revert TransferFailed on failure).
-        _revertNotImplemented();
+    function settle(bytes32 reservationId, uint32 deliveredWh, bytes32 sessionHash) external nonReentrant onlySettler {
+        Reservation storage r = reservations[reservationId];
+        if (r.status != Status.Active) revert InvalidStatus(r.status);
+        if (sessionHash == bytes32(0)) revert ZeroSessionHash();
+
+        uint32 billableWh = deliveredWh < r.requestedWh ? deliveredWh : r.requestedWh;
+        uint256 cost = (uint256(billableWh) * r.pricePerKwhWei) / WH_PER_KWH;
+        uint128 deposit = r.depositWei;
+        // cost <= deposit always holds for a valid quote; the cap mirrors units.ts defensively.
+        // The cast only happens when cost < deposit, so it fits in uint128.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint128 hostAmount = cost < deposit ? uint128(cost) : deposit;
+        uint128 refund = deposit - hostAmount;
+
+        r.status = Status.Settled;
+        r.deliveredWh = deliveredWh;
+        r.sessionHash = sessionHash;
+        emit ReservationSettled(reservationId, deliveredWh, billableWh, hostAmount, refund, sessionHash);
+
+        _payOrDefer(r.host, hostAmount);
+        _payOrDefer(r.driver, refund);
     }
 
     // ---------- Anyone ----------
 
     /// @inheritdoc IChargeMeshEscrow
-    function expire(bytes32) external nonReentrant {
-        // TODO(M1): docs/04-akilli-sozlesme.md — (nonReentrant already applied) checks:
-        //  - (status == Reserved && block.timestamp > endTime) or
-        //    (status == Active && block.timestamp > endTime + SETTLEMENT_GRACE)
-        //    else InvalidStatus(status) for other states / TooEarly when the window has not passed
-        //  Effects: status = Expired, slotTaken[slotRef] = false, emit ReservationExpired(id, depositWei).
-        //  Interaction: refund full depositWei to driver (revert TransferFailed on failure).
-        _revertNotImplemented();
+    function expire(bytes32 reservationId) external nonReentrant {
+        Reservation storage r = reservations[reservationId];
+        Status status = r.status;
+        if (status == Status.Reserved) {
+            // forge-lint: disable-next-line(block-timestamp)
+            if (block.timestamp <= r.endTime) revert TooEarly();
+        } else if (status == Status.Active) {
+            // forge-lint: disable-next-line(block-timestamp)
+            if (block.timestamp <= uint256(r.endTime) + SETTLEMENT_GRACE) revert TooEarly();
+        } else {
+            revert InvalidStatus(status);
+        }
+
+        r.status = Status.Expired;
+        slotTaken[r.slotRef] = false;
+        uint128 refund = r.depositWei;
+        emit ReservationExpired(reservationId, refund);
+
+        _payOrDefer(r.driver, refund);
+    }
+
+    /// @inheritdoc IChargeMeshEscrow
+    function withdraw() external nonReentrant {
+        uint256 amount = pendingWithdrawals[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+
+        pendingWithdrawals[msg.sender] = 0;
+        emit Withdrawn(msg.sender, amount);
+
+        (bool ok,) = payable(msg.sender).call{value: amount}("");
+        if (!ok) revert TransferFailed();
     }
 
     // ---------- Owner ----------
+
+    /// @notice Disabled: without an owner the settler could never be rotated.
+    function renounceOwnership() public view override onlyOwner {
+        revert RenounceDisabled();
+    }
 
     /// @inheritdoc IChargeMeshEscrow
     function setSettler(address newSettler) external onlyOwner {
@@ -146,6 +227,11 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     }
 
     /// @inheritdoc IChargeMeshEscrow
+    function pendingWithdrawal(address account) external view returns (uint256) {
+        return pendingWithdrawals[account];
+    }
+
+    /// @inheritdoc IChargeMeshEscrow
     function isSlotTaken(bytes32 slotRef) external view returns (bool) {
         return slotTaken[slotRef];
     }
@@ -157,9 +243,27 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
 
     // ---------- Internal ----------
 
-    /// @dev M0 only: reverts with {NotImplemented}. Remove together with the stubs in M1.
-    function _revertNotImplemented() private pure {
-        revert NotImplemented();
+    /// @dev ceil(wh * pricePerKwhWei / 1000). Cannot overflow: uint32 * uint128 < 2^160.
+    function _depositFor(uint32 wh, uint128 pricePerKwhWei) internal pure returns (uint256) {
+        return (uint256(wh) * pricePerKwhWei + WH_PER_KWH - 1) / WH_PER_KWH;
+    }
+
+    /// @dev Pushes native MON with a gas cap and without copying return data (no return-bomb).
+    ///      If the recipient rejects it, the amount is credited to {pendingWithdrawal} so that one
+    ///      party can never block the other's payment. Zero amounts are skipped.
+    function _payOrDefer(address to, uint256 amount) internal {
+        if (amount == 0) return;
+        bool ok;
+        // `to` is always the stored driver or host of the reservation.
+        assembly ("memory-safe") {
+            ok := call(PUSH_GAS_LIMIT, to, amount, 0, 0, 0, 0)
+        }
+        if (!ok) {
+            pendingWithdrawals[to] += amount;
+            // Emitted after our own push attempt; all callers are nonReentrant.
+            // forge-lint: disable-next-line(reentrancy-events)
+            emit PaymentDeferred(to, amount);
+        }
     }
 
     /// @dev EIP-712 digest of `quote` under this contract's domain ("ChargeMesh", "1", chainid, address(this)).
@@ -186,7 +290,7 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     /// @dev Reverts with {InvalidSignature} unless `signature` is a valid ECDSA signature of the
     ///      quote digest by the current settler. Malleable (high-s) and malformed signatures are rejected.
     function _verifyQuoteSigner(ReservationQuote calldata quote, bytes calldata signature) internal view {
-        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(_hashQuote(quote), signature);
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecoverCalldata(_hashQuote(quote), signature);
         if (err != ECDSA.RecoverError.NoError || recovered != settler) revert InvalidSignature();
     }
 }

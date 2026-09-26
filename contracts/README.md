@@ -13,6 +13,9 @@ Konum, adres, erişim bilgisi, kişi veya araç bilgisi ve ham sayaç verisi sö
 | Şarj bitti, ödeme | `settle(id, deliveredWh, sessionHash)` | Settler |
 | Başlamadan iptal | `cancel(id)` | Driver |
 | Süresi dolan rezervasyon | `expire(id)` | Herkes |
+| Ertelenen ödemeyi çekme | `withdraw()` | Ödemesi reddedilmiş Host veya Driver |
+
+Ödemeler doğrudan gönderilir. Alıcı ödemeyi reddederse işlem geri alınmaz; tutar `pendingWithdrawal` hanesine yazılır ve sahibi bunu `withdraw()` ile çeker. Böylece hiçbir taraf, diğerinin ödemesini engelleyerek depozitonun tamamını geri alamaz.
 
 Ödeme formülü:
 
