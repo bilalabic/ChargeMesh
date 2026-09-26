@@ -1,12 +1,25 @@
-/** Slot routes (docs/03-api.md, "Host"). Business logic lands in M1. */
 import type { FastifyPluginAsync } from "fastify";
-import { notImplemented } from "../errors";
+import { z } from "zod";
+import { toEnergySlot } from "../../domain";
+import { assertOwner, requireWallet } from "../auth";
+import { ApiError } from "../errors";
 import type { RouteDeps } from "./deps";
 
-export function slotRoutes(_deps: RouteDeps): FastifyPluginAsync {
+const SlotParams = z.object({ slotId: z.uuid() });
+
+export function slotRoutes(deps: RouteDeps): FastifyPluginAsync {
   return async (app) => {
-    // TODO(M1): docs/03-api.md "Host" - POST /slots/:slotId/close -> EnergySlot (only while OPEN,
-    // otherwise INVALID_STATE).
-    app.post("/slots/:slotId/close", async (_req, reply) => notImplemented(reply));
+    app.post("/slots/:slotId/close", async (request) => {
+      const wallet = requireWallet(request);
+      const { slotId } = SlotParams.parse(request.params);
+      const slot = await deps.store.findSlot(slotId);
+      if (!slot) throw new ApiError("NOT_FOUND", "Energy slot not found");
+      const node = await deps.store.findNode(slot.nodeId);
+      if (!node) throw new ApiError("NOT_FOUND", "Charging node not found");
+      assertOwner(wallet, node.hostAddress);
+      const closed = await deps.store.closeSlot(slotId, node._id, new Date());
+      if (!closed) throw new ApiError("INVALID_STATE", "Only an OPEN slot can be closed");
+      return toEnergySlot(closed);
+    });
   };
 }

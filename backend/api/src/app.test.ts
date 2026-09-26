@@ -66,12 +66,10 @@ describe("error format", () => {
     expect(body.error.details).toBeNull();
   });
 
-  it("M1 stub -> 501 INTERNAL 'Not implemented (M1)'", async () => {
+  it("protected route without wallet -> 401 UNAUTHORIZED", async () => {
     const res = await app.inject({ method: "POST", url: `${API_PREFIX}/intents`, payload: {} });
-    expect(res.statusCode).toBe(501);
-    expect(res.json()).toEqual({
-      error: { code: "INTERNAL", message: "Not implemented (M1)", details: null },
-    });
+    expect(res.statusCode).toBe(401);
+    expect(ApiError.parse(res.json()).error.code).toBe("UNAUTHORIZED");
   });
 
   it("malformed JSON -> 400 VALIDATION_ERROR", async () => {
