@@ -60,7 +60,7 @@ Bu değerler Host arayüzündeki **Yeni node** ve **Yeni slot yayınla** formlar
 
 ## Hazırlık: başlatma sırası
 
-Komutlar depo kökünde, PowerShell'de çalıştırılır. `backend/api/.env` içinde `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu olmalıdır. `frontend/.env.local` içinde `VITE_API_MODE=live`, `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` bulunur.
+Komutlar depo kökünde, PowerShell'de çalıştırılır. `backend/api/.env` içinde `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu olmalıdır. `frontend/.env.local` içinde `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` bulunur.
 
 1. **Canlı sistemi başlatın:** `.\scripts\dev.ps1`. Betik Atlas indekslerini doğrular; API'yi Monad modunda, simülatörü ve frontend'i canlı API modunda açar; ardından ön kontrolü çalıştırır.
 2. **Cüzdanları bağlayın:** Elif ve Can profillerinde MetaMask bağlantısını açın, Monad testnet'i seçin. Uygulama yanlış ağdaysa ağ ekleme/değiştirme isteği gösterir.
@@ -171,7 +171,7 @@ Testnet tamamen kullanılamıyorsa aynı akış yerel bir Anvil zincirinde oynat
 - [ ] `backend/api/.env`: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu.
 - [ ] Bakiyeler: Can ≥ 12 MON, settler ≥ 11 MON.
 - [ ] `.\scripts\preflight.ps1` yeşil. Betik şunları kontrol eder: `GET /health` yanıt veriyor; `GET /config` `chainMode: "monad"` bildiriyor; `GET /chargers` simülatörü bağlı gösteriyor; settler bakiyesi en az 11 MON; zincirdeki `settler()` adresi `deployments` içindeki settler ile aynı.
-- [ ] Frontend `VITE_API_MODE=live` ve `VITE_CHAIN_ID=10143` ile çalışıyor; iki Chrome profilinde Elif ve Can cüzdanları bağlı ve Monad Testnet seçili.
+- [ ] Frontend `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` ile çalışıyor; iki Chrome profilinde Elif ve Can cüzdanları bağlı ve Monad Testnet seçili.
 - [ ] Host node'u ve gelecekte başlayan slot arayüzden Atlas'a kaydedildi; slot `OPEN` durumunda.
 - [ ] Explorer sekmeleri açık.
 - [ ] Alternatif Monad testnet RPC adresi not edildi. Anvil yalnız geliştirici teşhisi için gerekirse ayrıca kullanılabilir.

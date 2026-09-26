@@ -36,7 +36,6 @@ $env:PORT = "4000"
 $env:OCPP_PORT = "9000"
 $env:WEB_BASE_URL = "http://localhost:3000"
 $env:CS_URL = "ws://localhost:9000/ocpp"
-$env:VITE_API_MODE = "live"
 $env:VITE_API_URL = "http://localhost:4000/api/v1"
 $env:VITE_CHAIN_ID = "10143"
 

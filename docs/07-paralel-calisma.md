@@ -15,10 +15,10 @@ Ekipler birbirinin **koduna değil, sözleşmelerine** bağımlıdır. Sözleşm
 | OCPP mesajları | [05-ocpp.md](05-ocpp.md) | API ↔ Simülatör |
 | Demo verisi | `shared/src/fixtures/` + [06-demo-senaryosu.md](06-demo-senaryosu.md) | Herkes |
 
-Her ekip, karşı tarafı taklit eden bir modla işe başlar:
+Her ekip, karşı tarafın sözleşmesine dayanarak bağımsız çalışır:
 
-- **Frontend** (Vue 3 + Vite), `VITE_API_MODE=mock` ile fixture'lardan beslenir. Cüzdan işlemleri için Monad testnet (isteğe bağlı olarak yerel Anvil) kullanılır.
-- **API**, `CHAIN_MODE=mock` ile zincire hiç dokunmadan tüm akışı çalıştırabilir. Veritabanı MongoDB Atlas'tır; `/health`, `/config` ve `/chargers` uç noktaları veritabanı bağlantısı olmadan da çalışır. Simülatör aynı ekibe ait olduğu için OCPP tarafı hazırdır.
+- **Frontend** (Vue 3 + Vite), `shared` içindeki API şemaları ve `routes` tablosuyla Fastify API'ye bağlanır; canlı akışta in-memory mock'u yoktur. Cüzdan işlemleri için Monad testnet (isteğe bağlı olarak yerel Anvil) kullanılır.
+- **API**, otomatik testlerde `CHAIN_MODE=mock` ile zincire hiç dokunmadan tüm akışı doğrular. Veritabanı MongoDB Atlas'tır; simülatör aynı ekibe ait olduğu için OCPP tarafı hazırdır.
 - **Contracts**, Foundry testleriyle tamamen bağımsızdır.
 
 ## Sahiplik
@@ -94,7 +94,7 @@ Bir ekip dalında, ekibin kendi kodunun yanında `docs/**` veya kök dosyalarda 
 | M0 | İskelet | ✅ | ✅ | ✅ | `typecheck`, `test` ve `forge test` yeşil (tamamlandı) |
 | M1 | Bağımsız çekirdek | Host ve Sürücü ekranları mock modda (Vue 3) | Node/slot/intent/matching + MongoDB Atlas + OCPP akışı, `CHAIN_MODE=mock` | ✅ `ChargeMeshEscrow` + tüm testler | Her ekip kendi alanında demo senaryosunu mock'la oynatabilir |
 | M2 | Zincir | `@wagmi/vue` ile `reserve()`, `cancel`, `withdraw()`; adres `GET /config` yanıtından (backend `getDeployment(10143)` ile doldurur) | `CHAIN_MODE=monad` (veya `anvil`): imza, confirm, `startSession`, `settle`; adres `getDeployment(10143)` ile | ✅ Anvil deploy + `chain:sync` → testnet deploy + doğrulama | Testnet üzerinde gerçek tx'lerle rezervasyon |
-| M3 | Entegrasyon | `VITE_API_MODE=live` | `CHAIN_MODE=monad` | ✅ Testnet adresi `getDeployment(10143)` ile yayında | [06-demo-senaryosu.md](06-demo-senaryosu.md) testnet'te baştan sona çalışır |
+| M3 | Entegrasyon | Fastify API'ye canlı bağlantı | `CHAIN_MODE=monad` | ✅ Testnet adresi `getDeployment(10143)` ile yayında | [06-demo-senaryosu.md](06-demo-senaryosu.md) testnet'te baştan sona çalışır |
 | M4 | Cilalama | Proof ekranı, Türkçe hata mesajları, bekleyen ödeme uyarısı | Hata kurtarma (`settle` yeniden deneme) | ✅ Explorer doğrulaması, Monad gaz payı (`PUSH_GAS_MARGIN = 50_000`) | Demo provası |
 
 Testnet adresi hazırdır ve `getDeployment(10143)` ile okunur; Frontend ve Backend ekipleri doğrudan testnet'le çalışabilir. Yerel Anvil isteğe bağlıdır; çevrimdışı çalışmak veya hızlı deneme yapmak isteyenler [04-akilli-sozlesme.md](04-akilli-sozlesme.md#deploy-ve-adres-yayını) belgesindeki Anvil adımlarını izleyebilir. Ekiplerin açık işleri [08-acik-isler.md](08-acik-isler.md) belgesindedir.

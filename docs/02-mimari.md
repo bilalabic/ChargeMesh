@@ -93,20 +93,19 @@ Kaynak: [docs.monad.xyz](https://docs.monad.xyz/developer-essentials/testnet) (E
 
 ## Çalışma modları
 
-Ekiplerin birbirini beklemeden çalışabilmesi için her bileşenin bağımsız bir modu vardır:
+Ekiplerin birbirini beklemeden çalışabilmesi için backend'in zincir modu ortam değişkeniyle seçilir; frontend ise her zaman canlı Fastify API'sine bağlanır (in-memory mock'u kaldırılmıştır):
 
 | Değişken | Değerler | Etki |
 | --- | --- | --- |
-| `VITE_API_MODE` (frontend) | `mock` · `live` | `mock` modunda frontend, `shared` içindeki fixture'larla çalışır ve API'ye ihtiyaç duymaz. Mock modda zincir kimliği her yerde `31337`'dir. |
-| `CHAIN_MODE` (backend) | `mock` · `anvil` · `monad` | `mock` modunda zincir çağrıları yapılmaz, sahte tx hash'leri üretilir ve `confirm` biçimi doğru her hash'i kabul eder. `anvil` yerel zinciri, `monad` testnet'i kullanır. |
-| `DEMO_ALLOW_ANY_TIME` (backend) | `true` · `false` | `true` olduğunda oturum başlatılırken zaman penceresi kontrol edilmez. Canlı demoda saat farkı sorun çıkarmasın diye vardır. Zincirdeki `endTime` kontrolü yine geçerlidir. |
+| `CHAIN_MODE` (backend) | `mock` · `anvil` · `monad` | `mock` modunda zincir çağrıları yapılmaz, sahte tx hash'leri üretilir ve `confirm` biçimi doğru her hash'i kabul eder; yalnızca `NODE_ENV=test` altında kabul edilir, çalışma zamanında `CHAIN_MODE` zorunludur. `anvil` yerel zinciri, `monad` testnet'i kullanır. |
+| `DEMO_ALLOW_ANY_TIME` (backend) | `true` · `false` | `true` olduğunda oturum başlatılırken zaman penceresi kontrol edilmez; yalnızca `NODE_ENV=test` altında kabul edilir, diğer ortamlarda API başlamaz. Zincirdeki `endTime` kontrolü yine geçerlidir. |
 
-> **Zincirsiz canlı mod.** Frontend `live` modda çalışırken `GET /config` yanıtında `chainMode: "mock"` gelirse cüzdan açılmaz ve `reserve()` gönderilmez. Frontend, `0x` + 64 hex karakterlik sahte bir tx hash'iyle doğrudan `confirm` çağırır. Böylece frontend ve backend zincir olmadan birlikte test edilebilir. Bu durumda API `chainId` olarak `31337` bildirir.
+> **Mock zincir raporu.** `GET /config` yalnızca otomatik testlerde `chainMode: "mock"` döner; normal çalışmada `CHAIN_MODE=monad` veya `anvil` zorunludur. Canlı frontend, backend yine de `mock` bildirirse cüzdan adımını hata ile reddeder ve `reserve()` gönderilmez.
 
 ### Zincir kimliği ve adres nereden okunur?
 
-- **Frontend, `live` mod:** `chainId`, `contractAddress` ve `explorerUrl` **yalnızca** `GET /config` yanıtından alınır. `VITE_CHAIN_ID` yalnızca wagmi'nin varsayılan ağıdır; `/config` ile uyuşmazsa ekranda uyarı çıkar ve kullanıcıdan cüzdanda ağ değiştirmesi istenir.
-- **Backend ve frontend `mock` modu:** Sözleşme adresi `getDeployment(chainId)` ile `shared/src/chain/deployments.ts` dosyasından okunur. Adres hiçbir ortam değişkenine yazılmaz; böylece tüm bileşenler her zaman aynı adresi kullanır.
+- **Frontend:** `chainId`, `contractAddress` ve `explorerUrl` **yalnızca** `GET /config` yanıtından alınır. `VITE_CHAIN_ID` yalnızca wagmi'nin varsayılan ağıdır; `/config` ile uyuşmazsa ekranda uyarı çıkar ve kullanıcıdan cüzdanda ağ değiştirmesi istenir.
+- **Backend `mock` modu (yalnızca testler):** Sözleşme adresi `getDeployment(chainId)` ile `shared/src/chain/deployments.ts` dosyasından okunur. Adres hiçbir ortam değişkenine yazılmaz; böylece tüm bileşenler her zaman aynı adresi kullanır.
 
 ## Demoda QR
 
@@ -224,21 +223,20 @@ Her uygulamanın klasöründe bir `.env.example` bulunur. Gerçek `.env` dosyala
 
 | Uygulama | Değişken | Örnek | Açıklama |
 | --- | --- | --- | --- |
-| frontend | `VITE_API_URL` | `http://localhost:4000/api/v1` | Yalnızca `live` modda kullanılır |
-| frontend | `VITE_API_MODE` | `mock` | `mock` veya `live` |
-| frontend | `VITE_CHAIN_ID` | `10143` | wagmi'nin varsayılan ağı: `31337` (anvil) veya `10143`. `live` modda asıl kaynak `GET /config`'tir. |
-| backend | `NODE_ENV` | `development` | `development`, `test` veya `production`. `production` iken `POST /demo/seed` kapalıdır. |
+| frontend | `VITE_API_URL` | `http://localhost:4000/api/v1` | Fastify API'nin taban adresi |
+| frontend | `VITE_CHAIN_ID` | `10143` | wagmi'nin varsayılan ağı: `31337` (anvil) veya `10143`. Asıl kaynak `GET /config`'tir. |
+| backend | `NODE_ENV` | `development` | `development`, `test` veya `production`. `POST /demo/seed` yalnızca `NODE_ENV=test` ve `CHAIN_MODE=mock` altında açılır. |
 | backend | `PORT` | `4000` | |
 | backend | `OCPP_PORT` | `9000` | |
 | backend | `MONGODB_URI` | `mongodb+srv://<user>:<password>@<cluster>/` | Gizlidir; loglanmaz ve commit edilmez |
 | backend | `MONGODB_DB_NAME` | `chargemesh` | Uygulama veritabanı adı. Paralel çalışan API'ler farklı ad kullanır. |
 | backend | `WEB_BASE_URL` | `http://localhost:3000` | QR içindeki başlatma adresinin kökü. CORS'ta izin verilen origin de budur. |
-| backend | `CHAIN_MODE` | `mock` | `mock`, `anvil` veya `monad` |
+| backend | `CHAIN_MODE` | `monad` | Çalışma zamanında zorunludur: `mock`, `anvil` veya `monad`. `mock` yalnızca `NODE_ENV=test` altında kabul edilir. |
 | backend | `RPC_URL` | `https://testnet-rpc.monad.xyz` | Boşsa moda göre varsayılan kullanılır (`anvil`: `http://localhost:8545`, `monad`: `https://testnet-rpc.monad.xyz`). |
 | backend | `SETTLER_PRIVATE_KEY` | *(yalnızca testnet anahtarı)* | Teklif imzalar, `startSession`/`settle` gönderir. `anvil` ve `monad` modlarında zorunludur; `mock` modda boş bırakılırsa geçici bir anahtar üretilir. |
 | backend | `QUOTE_TTL_SECONDS` | `300` | Teklifin geçerlilik süresi (30–3600 sn) |
 | backend | `RECONCILIATION_INTERVAL_MS` | `30000` | Yarım kalan start/settlement işlemlerini başlangıçta ve bu aralıkla uzlaştırır (5000–300000 ms). |
-| backend | `DEMO_ALLOW_ANY_TIME` | `true` | Verilmezse `NODE_ENV` `production` değilken `true`, `production`'da `false` olur. |
+| backend | `DEMO_ALLOW_ANY_TIME` | `false` | Verilmezse `NODE_ENV=test` altında `true`, diğer ortamlarda `false` olur. `test` dışında `true` girilirse API başlamaz. |
 | charger-sim | `CS_URL` | `ws://localhost:9000/ocpp` | `chargePointId` sona eklenir. |
 | charger-sim | `CHARGE_POINT_ID` | `CM-DEMO-001` | |
 | charger-sim | `CONNECTOR_ID` | `1` | |

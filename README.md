@@ -168,7 +168,6 @@ Copy-Item frontend/.env.example frontend/.env.local
 ```dotenv
 CHAIN_MODE=monad
 DEMO_ALLOW_ANY_TIME=false
-VITE_API_MODE=live
 VITE_API_URL=http://localhost:4000/api/v1
 VITE_CHAIN_ID=10143
 ```

@@ -84,8 +84,12 @@ function startUpdates() {
       eventSource.addEventListener(eventName, () => void refresh());
     }
     eventSource.addEventListener(SESSION_SSE_EVENTS.error, (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
-      error.value = payload.message ?? "Oturum sırasında hata oluştu.";
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as { message?: string };
+        error.value = payload.message ?? "Oturum sırasında hata oluştu.";
+      } catch {
+        error.value = "Oturum sırasında hata oluştu.";
+      }
     });
   } else {
     pollTimer = setInterval(() => void refresh(), 1000);

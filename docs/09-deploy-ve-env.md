@@ -6,7 +6,7 @@ Bu belge frontend, API, OCPP simülatörü ve sözleşme araçlarının kulland�
 
 Kullanıcıya açılan normal akış yalnızca canlı moddur:
 
-- Frontend `VITE_API_MODE=live` ile Fastify API'ye bağlanır.
+- Frontend Fastify API'ye bağlanır; in-memory mock'u kaldırılmıştır.
 - Backend `CHAIN_MODE=monad` ile Monad testnet'i kullanır.
 - Node, slot, intent, rezervasyon ve oturum kayıtları MongoDB Atlas'ta tutulur.
 - Sürücü `reserve`, `cancel`, `expire` ve `withdraw` işlemlerini MetaMask'ta onaylar.
@@ -22,7 +22,7 @@ Kullanıcıya açılan normal akış yalnızca canlı moddur:
 .\scripts\dev.ps1
 ```
 
-Betik gizli değerleri okumaz veya yazdırmaz. Atlas indeks kontrolünü çalıştırır ve aşağıdaki public ayarları süreç seviyesinde zorlar: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `VITE_API_MODE=live`, `VITE_CHAIN_ID=10143`. API Atlas'a bağlanıp Monad modunda hazır olmadan simülatör ve frontend aşamasına geçmez.
+Betik gizli değerleri okumaz veya yazdırmaz. Atlas indeks kontrolünü çalıştırır ve aşağıdaki public ayarları süreç seviyesinde zorlar: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `VITE_API_URL=http://localhost:4000/api/v1`, `VITE_CHAIN_ID=10143`. API Atlas'a bağlanıp Monad modunda hazır olmadan simülatör ve frontend aşamasına geçmez.
 
 Başlangıçtan sonra yapılan `scripts/preflight.ps1` kontrolü hiçbir işlem göndermez. API/chain yapılandırmasını, Atlas'a salt okunur erişimi, OCPP bağlantısını, deployment adreslerini, settler bakiyesini ve saat farkını denetler. İstenirse `-DriverAddress 0x...` ile Sürücü bakiyesi de kontrol edilir.
 
@@ -54,14 +54,13 @@ Vercel projesi depo kökünden build edilmelidir; aksi halde frontend, workspace
 Vercel **Production** ve gerekiyorsa **Preview** ortamına yalnızca şu değişkenler girilir:
 
 ```dotenv
-VITE_API_MODE=live
 VITE_API_URL=https://<BACKEND_DOMAIN>/api/v1
 VITE_CHAIN_ID=10143
 ```
 
 `VITE_` önekli değerler tarayıcı paketine gömülür ve gizli değildir. Buraya özel anahtar, Atlas URI'si, parola veya token yazılmaz. Vercel'de env değişikliği eski deployment'ı değiştirmez; yeni deployment gerekir.
 
-Vue Router `createWebHistory()` kullandığı için Vercel deploy aşamasında bütün uygulama yollarını `/index.html` dosyasına yönlendiren SPA rewrite kuralı da eklenmelidir. Bu ayar deploy turunda `vercel.json` ile eklenecektir.
+Vue Router `createWebHistory()` kullandığı için depo kökündeki `vercel.json` bütün uygulama yollarını `/index.html` dosyasına yönlendiren SPA rewrite kuralını ve yukarıdaki install/build/output ayarlarını içerir.
 
 ## Backend API ve OCPP Central System
 
