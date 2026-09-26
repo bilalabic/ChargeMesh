@@ -744,6 +744,11 @@ export const chargeMeshEscrowAbi = [
   },
   {
     "type": "error",
+    "name": "InsufficientGas",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidQuote",
     "inputs": []
   },
