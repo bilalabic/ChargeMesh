@@ -48,3 +48,5 @@ jobs:
         run: forge build --sizes
       - name: Test
         run: forge test -vv
+      - name: Gas snapshot
+        run: forge snapshot --check --tolerance 5 --no-match-path 'test/invariant/*' --no-match-test 'testFuzz'
