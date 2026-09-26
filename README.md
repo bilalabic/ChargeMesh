@@ -55,6 +55,7 @@ ChargeMesh/
 | [06-demo-senaryosu.md](docs/06-demo-senaryosu.md) | Kabul testi olarak kullanılan uçtan uca demo ve sunum rehberi |
 | [07-paralel-calisma.md](docs/07-paralel-calisma.md) | Sahiplik, dal düzeni, sözleşme değişikliği protokolü, entegrasyon |
 | [08-acik-isler.md](docs/08-acik-isler.md) | Ekiplere göre açık işler |
+| [degisiklik-gunlugu.md](docs/degisiklik-gunlugu.md) | Sözleşme ve entegrasyon değişiklik kaydı |
 
 ## Hızlı başlangıç
 
