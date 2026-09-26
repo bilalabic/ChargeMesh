@@ -15,10 +15,8 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 export type ApiMode = Env["apiMode"];
 
-// NEXT_PUBLIC_* values are inlined at build time, so each one must be read with a
-// literal `process.env.NAME` expression (no dynamic access).
 export const env: Env = EnvSchema.parse({
-  apiUrl: blankToUndefined(process.env.NEXT_PUBLIC_API_URL),
-  apiMode: blankToUndefined(process.env.NEXT_PUBLIC_API_MODE),
-  chainId: blankToUndefined(process.env.NEXT_PUBLIC_CHAIN_ID),
+  apiUrl: blankToUndefined(import.meta.env.VITE_API_URL),
+  apiMode: blankToUndefined(import.meta.env.VITE_API_MODE),
+  chainId: blankToUndefined(import.meta.env.VITE_CHAIN_ID),
 });

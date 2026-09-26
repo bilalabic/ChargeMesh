@@ -1,5 +1,5 @@
 /**
- * In-memory ApiClient for NEXT_PUBLIC_API_MODE=mock. Seeded from createDemoFixtures()
+ * In-memory ApiClient for VITE_API_MODE=mock. Seeded from createDemoFixtures()
  * and ranked with rankMatches(), so the demo flow (docs/06-demo-senaryosu.md) runs in the
  * browser without the API or a chain. Charging is simulated with timers.
  */
@@ -79,7 +79,7 @@ const mockTx = (seed: string): Address => {
 const MOCK_SIGNATURE: Address = `0x${"ab".repeat(65)}`;
 
 export function createMockApiClient(options: MockApiClientOptions = {}): ApiClient {
-  const chainId = options.chainId ?? 10143;
+  const chainId = options.chainId ?? 31337;
   const tickMs = options.tickMs ?? 1000;
   const whPerTick = options.whPerTick ?? 1000;
   const powerW = options.powerW ?? 7400;

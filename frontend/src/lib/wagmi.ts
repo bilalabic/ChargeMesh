@@ -1,5 +1,6 @@
 import { anvilLocal, monadTestnet } from "@chargemesh/shared";
-import { createConfig, http, injected } from "wagmi";
+import { createConfig, http } from "@wagmi/vue";
+import { injected } from "@wagmi/vue/connectors";
 
 export const wagmiConfig = createConfig({
   chains: [monadTestnet, anvilLocal],
@@ -9,10 +10,10 @@ export const wagmiConfig = createConfig({
     [monadTestnet.id]: http(),
     [anvilLocal.id]: http(),
   },
-  ssr: true,
+  ssr: false,
 });
 
-declare module "wagmi" {
+declare module "@wagmi/vue" {
   interface Register {
     config: typeof wagmiConfig;
   }
