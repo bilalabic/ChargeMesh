@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { recoverTypedDataAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
@@ -64,7 +64,7 @@ describe("ids", () => {
 
   it("derives a stable bytes32 reservation id", () => {
     expect(toOnchainReservationId(DEMO_IDS.reservation)).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(toOnchainReservationId("a")).not.toBe(toOnchainReservationId("b"));
+    expect(toOnchainReservationId(DEMO_IDS.reservation)).not.toBe(toOnchainReservationId(DEMO_IDS.slot));
   });
 });
 
@@ -105,8 +105,9 @@ describe("matching", () => {
   });
 
   it("filters out incompatible connectors", () => {
-    const f = createDemoFixtures();
-    const result = rankMatches({ ...f.intent, connectorType: "TYPE1" }, [{ slot: f.slot, node: f.node }]);
+    const now = new Date("2026-10-03T07:00:00.000Z");
+    const f = createDemoFixtures(now);
+    const result = rankMatches({ ...f.intent, connectorType: "TYPE1" }, [{ slot: f.slot, node: f.node }], now);
     expect(result).toHaveLength(0);
   });
 });
@@ -119,7 +120,12 @@ describe("fixtures conform to API schemas", () => {
     expect(() => ProofResponse.parse(f.proof)).not.toThrow();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("applies request defaults", () => {
+    vi.useFakeTimers({ now: new Date("2026-10-03T06:00:00.000Z") });
     const parsed = CreateIntentRequest.parse({
       lat: 40.98,
       lng: 29.03,

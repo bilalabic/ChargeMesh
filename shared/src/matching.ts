@@ -1,6 +1,14 @@
 /**
  * Deterministic slot matching (docs/03-api.md, "Eşleştirme algoritması").
- * Pure function: same input => same output. Used by the API and by web mock mode.
+ * Pure function: same input (including `now`) => same output. Used by the API and by web mock mode.
+ *
+ * Differences from a naive reading of the spec, all defensive:
+ * - Filters are NaN-safe: a candidate whose distance, window bounds or deliverable
+ *   energy is not a finite number is dropped instead of slipping through a `>` check.
+ * - The window start is clamped to `now`: `window = [max(slot.startsAt, intent.arriveAt, now),
+ *   min(slot.endsAt, intent.departAt)]`. A window already partly in the past is shortened,
+ *   one fully in the past is dropped; MIN_WINDOW_MS applies to the clamped window.
+ * - Candidates are de-duplicated by slot id; the first occurrence wins.
  */
 import type {
   ChargeIntent,
@@ -57,21 +65,31 @@ export function rankMatches(
   const nowMs = now.getTime();
   const scored: Scored[] = [];
 
+  const seen = new Set<string>();
+
   for (const c of candidates) {
+    if (seen.has(c.slot.id)) continue;
+    seen.add(c.slot.id);
     if (!isAvailable(c, nowMs)) continue;
     if (c.node.connectorType !== intent.connectorType) continue;
     if (!intent.acceptedAccessTypes.includes(c.node.accessType)) continue;
 
     const distanceKm = haversineKm(intent.lat, intent.lng, c.node.lat, c.node.lng);
-    if (distanceKm > intent.radiusKm) continue;
+    if (!(distanceKm <= intent.radiusKm)) continue;
 
-    const windowStartMs = Math.max(Date.parse(c.slot.startsAt), Date.parse(intent.arriveAt));
-    const windowEndMs = Math.min(Date.parse(c.slot.endsAt), Date.parse(intent.departAt));
-    if (windowEndMs - windowStartMs < MIN_WINDOW_MS) continue;
+    const slotStartMs = Date.parse(c.slot.startsAt);
+    const slotEndMs = Date.parse(c.slot.endsAt);
+    const arriveMs = Date.parse(intent.arriveAt);
+    const departMs = Date.parse(intent.departAt);
+    if (![slotStartMs, slotEndMs, arriveMs, departMs, nowMs].every(Number.isFinite)) continue;
+
+    const windowStartMs = Math.max(slotStartMs, arriveMs, nowMs);
+    const windowEndMs = Math.min(slotEndMs, departMs);
+    if (!(windowEndMs - windowStartMs >= MIN_WINDOW_MS)) continue;
 
     const hours = (windowEndMs - windowStartMs) / 3_600_000;
     const deliverableWh = Math.floor(Math.min(c.slot.maxEnergyWh, c.node.maxPowerKw * 1000 * hours));
-    if (deliverableWh <= 0) continue;
+    if (!(deliverableWh > 0)) continue;
 
     const fullyCovers = deliverableWh >= intent.requestedWh;
     scored.push({

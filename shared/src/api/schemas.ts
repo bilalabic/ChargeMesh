@@ -3,6 +3,7 @@
  * Human-readable spec: docs/03-api.md. Change only via the contract change protocol
  * (docs/07-paralel-calisma.md).
  */
+import { isAddress } from "viem";
 import { z } from "zod";
 import {
   AccessType,
@@ -16,14 +17,42 @@ import {
 
 // ---------- Primitives ----------
 
-export const Address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address");
+/**
+ * EVM address. All-lower-case and all-upper-case hex are accepted as-is; a mixed-case
+ * address must carry a valid EIP-55 checksum (catches typos in copy-pasted addresses).
+ */
+export const Address = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address")
+  .refine((a) => {
+    const body = a.slice(2);
+    if (body === body.toLowerCase() || body === body.toUpperCase()) return true;
+    return isAddress(a, { strict: true });
+  }, "Invalid EIP-55 address checksum");
 export const Hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "Expected 32-byte hex");
 export const HexBytes = z.string().regex(/^0x([0-9a-fA-F]{2})*$/, "Expected hex bytes");
 /** Wei amount as a non-negative decimal integer string. */
 export const WeiString = z.string().regex(/^(0|[1-9]\d*)$/, "Expected decimal integer string");
+
+/** 2^128 - 1: the largest value of a Solidity `uint128` (escrow amounts). */
+export const UINT128_MAX_WEI = (1n << 128n) - 1n;
+/** Wei amount that fits the escrow's `uint128` fields. */
+export const Uint128WeiString = WeiString.refine(
+  (v) => BigInt(v) <= UINT128_MAX_WEI,
+  "Amount exceeds uint128",
+);
+/**
+ * Upper bound for `pricePerKwhWei` so that the deposit of the largest intent
+ * (100_000 Wh, see CreateIntentRequest) still fits uint128:
+ * depositFor(100_000, p) = ceil(100_000 * p / 1000) = 100 * p <= 2^128 - 1.
+ */
+export const MAX_PRICE_PER_KWH_WEI = UINT128_MAX_WEI / 100n;
+
 export const IsoDateTime = z.iso.datetime();
 export const Uuid = z.uuid();
 export const Wh = z.number().int().nonnegative();
+/** Energy in Wh for fields stored on-chain as Solidity `uint32` (0..4_294_967_295). */
+export const Uint32Wh = z.number().int().min(0).max(0xffff_ffff);
 export const Latitude = z.number().min(-90).max(90);
 export const Longitude = z.number().min(-180).max(180);
 export const OcppChargePointId = z.string().regex(/^[A-Za-z0-9._-]{3,48}$/);
@@ -88,6 +117,8 @@ export const CreateNodeRequest = z.object({
   ocppConnectorId: z.number().int().min(1).default(1),
 });
 export type CreateNodeRequest = z.input<typeof CreateNodeRequest>;
+/** After `CreateNodeRequest.parse()`: defaults applied (`accessInstructions`, `ocppConnectorId`). */
+export type CreateNodeRequestParsed = z.output<typeof CreateNodeRequest>;
 
 export const PublicChargingNode = z.object({
   id: Uuid,
@@ -121,12 +152,20 @@ export const CreateSlotRequest = z
     startsAt: IsoDateTime,
     endsAt: IsoDateTime,
     maxEnergyWh: z.number().int().min(1_000).max(200_000),
-    pricePerKwhWei: WeiString.refine((v) => BigInt(v) > 0n, "Price must be > 0"),
+    pricePerKwhWei: WeiString.refine((v) => BigInt(v) > 0n, "Price must be > 0").refine(
+      (v) => BigInt(v) <= MAX_PRICE_PER_KWH_WEI,
+      "Price too high: the deposit would not fit uint128",
+    ),
   })
   .refine((s) => {
     const ms = Date.parse(s.endsAt) - Date.parse(s.startsAt);
     return ms >= 30 * 60_000 && ms <= 24 * 3_600_000;
-  }, "Slot duration must be between 30 minutes and 24 hours");
+  }, "Slot duration must be between 30 minutes and 24 hours")
+  // Evaluated at parse time (Date.now()): the same body becomes invalid once endsAt has passed.
+  .refine((s) => Date.parse(s.endsAt) > Date.now(), {
+    message: "endsAt must be in the future",
+    path: ["endsAt"],
+  });
 export type CreateSlotRequest = z.infer<typeof CreateSlotRequest>;
 
 export const EnergySlot = z.object({
@@ -157,9 +196,16 @@ export const CreateIntentRequest = z
   })
   .refine((i) => {
     const ms = Date.parse(i.departAt) - Date.parse(i.arriveAt);
-    return ms > 0 && ms <= 24 * 3_600_000;
-  }, "departAt must be after arriveAt and within 24 hours");
+    return ms >= 15 * 60_000 && ms <= 24 * 3_600_000;
+  }, "departAt must be at least 15 minutes and at most 24 hours after arriveAt")
+  // Evaluated at parse time (Date.now()): the same body becomes invalid once departAt has passed.
+  .refine((i) => Date.parse(i.departAt) > Date.now(), {
+    message: "departAt must be in the future",
+    path: ["departAt"],
+  });
 export type CreateIntentRequest = z.input<typeof CreateIntentRequest>;
+/** After `CreateIntentRequest.parse()`: defaults applied (`radiusKm`, `acceptedAccessTypes`). */
+export type CreateIntentRequestParsed = z.output<typeof CreateIntentRequest>;
 
 export const ChargeIntent = z.object({
   id: Uuid,
@@ -206,9 +252,9 @@ export const ReservationQuote = z.object({
   slotRef: Hex32,
   driver: Address,
   host: Address,
-  requestedWh: Wh,
-  pricePerKwhWei: WeiString,
-  depositWei: WeiString,
+  requestedWh: Uint32Wh,
+  pricePerKwhWei: Uint128WeiString,
+  depositWei: Uint128WeiString,
   /** Unix seconds */
   startTime: z.number().int().nonnegative(),
   endTime: z.number().int().nonnegative(),
@@ -225,10 +271,10 @@ export const ReservationAccess = z.object({
 export type ReservationAccess = z.infer<typeof ReservationAccess>;
 
 export const Settlement = z.object({
-  deliveredWh: Wh,
-  billableWh: Wh,
-  hostAmountWei: WeiString,
-  refundWei: WeiString,
+  deliveredWh: Uint32Wh,
+  billableWh: Uint32Wh,
+  hostAmountWei: Uint128WeiString,
+  refundWei: Uint128WeiString,
   sessionHash: Hex32,
 });
 export type Settlement = z.infer<typeof Settlement>;
@@ -337,13 +383,30 @@ export const SettledEvent = z.object({
 });
 export type SettledEvent = z.infer<typeof SettledEvent>;
 
-/** SSE event names emitted by GET /sessions/:id/events */
+/**
+ * SSE event names emitted by GET /sessions/:id/events.
+ * The error event is `session.error`, not `error`: an SSE event named `error` collides
+ * with EventSource's native `error` event (connection failures), so a listener could not
+ * tell a server-sent error from a dropped connection.
+ */
 export const SESSION_SSE_EVENTS = {
   sessionUpdated: "session.updated",
   meter: "meter",
   settled: "settled",
-  error: "error",
+  error: "session.error",
 } as const;
+export type SessionSseEventName = (typeof SESSION_SSE_EVENTS)[keyof typeof SESSION_SSE_EVENTS];
+
+/**
+ * Payload of the `session.error` SSE event. `code` is normally an `ApiErrorCode` or one of
+ * the session-only codes `CHAIN_ERROR` / `CHARGER_ERROR`. It is typed as a plain string on
+ * purpose, so a new code on the server does not make older clients reject the event.
+ */
+export const SessionErrorEvent = z.object({
+  code: z.string().min(1),
+  message: z.string(),
+});
+export type SessionErrorEvent = z.infer<typeof SessionErrorEvent>;
 
 // ---------- Proof of Charge ----------
 
@@ -361,8 +424,8 @@ export const ProofOfChargeSummary = z.object({
   stoppedAt: IsoDateTime,
   meterStartWh: Wh,
   meterStopWh: Wh,
-  requestedWh: Wh,
-  deliveredWh: Wh,
+  requestedWh: Uint32Wh,
+  deliveredWh: Uint32Wh,
   stopReason: z.string(),
   meterSamples: z.object({
     count: z.number().int().nonnegative(),
@@ -379,10 +442,10 @@ export const ProofResponse = z.object({
   onchain: z
     .object({
       sessionHash: Hex32,
-      deliveredWh: Wh,
-      billableWh: Wh,
-      hostAmountWei: WeiString,
-      refundWei: WeiString,
+      deliveredWh: Uint32Wh,
+      billableWh: Uint32Wh,
+      hostAmountWei: Uint128WeiString,
+      refundWei: Uint128WeiString,
       txHash: Hex32,
     })
     .nullable(),

@@ -4,6 +4,7 @@ export * from "./deployments";
 export * from "./eip712";
 export * from "./errors";
 export * from "./events";
+export * from "./finality";
 export * from "./status";
 export * from "./types";
 

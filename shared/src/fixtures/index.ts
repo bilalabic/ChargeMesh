@@ -47,6 +47,9 @@ export interface DemoFixtures {
 }
 
 export function createDemoFixtures(now: Date = new Date(), deliveredWh = 20000): DemoFixtures {
+  if (!Number.isSafeInteger(deliveredWh) || deliveredWh < 0 || deliveredWh > 0xffff_ffff) {
+    throw new RangeError(`Demo fixtures: deliveredWh must be a uint32 integer, got ${deliveredWh}`);
+  }
   const t = (offsetMin: number) => new Date(now.getTime() + offsetMin * 60_000).toISOString();
   const createdAt = t(-60);
 
@@ -126,7 +129,8 @@ export function createDemoFixtures(now: Date = new Date(), deliveredWh = 20000):
   }));
   const summary: ProofOfChargeSummary = {
     version: PROOF_VERSION,
-    chainId: 10143,
+    // Mock mode reports the local Anvil chain id (docs/02-mimari.md); the contract is a placeholder.
+    chainId: 31337,
     contract: DEMO_CONTRACT_ADDRESS,
     reservationId: onchainId,
     chargePointId: DEMO_CHARGE_POINT_ID,

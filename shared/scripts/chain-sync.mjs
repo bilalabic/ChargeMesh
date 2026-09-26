@@ -1,39 +1,116 @@
 #!/usr/bin/env node
 // Generates src/chain/abi.ts and src/chain/deployments.ts from Foundry output.
 // Run `forge build` (WSL) first. Owner: blockchain team. See docs/04-akilli-sozlesme.md.
+//
+// Flags:
+//   --allow-interface  fall back to the IChargeMeshEscrow artifact when the implementation
+//                      artifact is missing (its ABI lacks inherited errors such as Ownable's).
+//   --include-local    also export contracts/deployments/31337.json (local Anvil). Skipped by
+//                      default so a local deploy never ends up in the shared package.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const LOCAL_CHAIN_ID = 31337;
+const KNOWN_FLAGS = new Set(["--allow-interface", "--include-local"]);
+const args = new Set(process.argv.slice(2));
+for (const a of args) {
+  if (!KNOWN_FLAGS.has(a)) fail(`unknown flag ${a} (supported: ${[...KNOWN_FLAGS].join(", ")})`);
+}
+const allowInterface = args.has("--allow-interface");
+const includeLocal = args.has("--include-local");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const contractsDir = resolve(here, "../../contracts");
 const chainDir = resolve(here, "../src/chain");
 
-const candidates = [
-  join(contractsDir, "out/ChargeMeshEscrow.sol/ChargeMeshEscrow.json"),
-  join(contractsDir, "out/IChargeMeshEscrow.sol/IChargeMeshEscrow.json"),
-];
-const artifactPath = candidates.find((p) => existsSync(p));
-if (!artifactPath) {
-  console.error("No Foundry artifact found. Run `forge build` in contracts/ (WSL) first.");
+function fail(message) {
+  console.error(`chain:sync: ${message}`);
   process.exit(1);
 }
 
-const { abi } = JSON.parse(readFileSync(artifactPath, "utf8"));
-const source = artifactPath.includes("IChargeMeshEscrow") ? "IChargeMeshEscrow" : "ChargeMeshEscrow";
+// ---------- ABI ----------
+
+const implArtifact = join(contractsDir, "out/ChargeMeshEscrow.sol/ChargeMeshEscrow.json");
+const ifaceArtifact = join(contractsDir, "out/IChargeMeshEscrow.sol/IChargeMeshEscrow.json");
+let artifactPath;
+if (existsSync(implArtifact)) {
+  artifactPath = implArtifact;
+} else if (allowInterface && existsSync(ifaceArtifact)) {
+  artifactPath = ifaceArtifact;
+  console.warn(
+    "chain:sync: WARNING: using the IChargeMeshEscrow interface ABI (--allow-interface); inherited errors are missing.",
+  );
+} else {
+  fail(
+    `implementation artifact not found: ${implArtifact}\n` +
+      "Run `forge build` in contracts/ (WSL) first, " +
+      "or pass --allow-interface to fall back to the IChargeMeshEscrow artifact.",
+  );
+}
+
+let abi;
+try {
+  abi = JSON.parse(readFileSync(artifactPath, "utf8")).abi;
+} catch (err) {
+  fail(`cannot read ${artifactPath}: ${err instanceof Error ? err.message : String(err)}`);
+}
+if (!Array.isArray(abi) || abi.length === 0) fail(`${artifactPath} has no ABI`);
+
+// ---------- Deployments (all validated before anything is written) ----------
+
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const deploymentsDir = join(contractsDir, "deployments");
+const files = existsSync(deploymentsDir)
+  ? readdirSync(deploymentsDir).filter((f) => f.endsWith(".json"))
+  : [];
+
+const errors = [];
+const entries = [];
+for (const file of files) {
+  const m = /^(\d+)\.json$/.exec(file);
+  if (!m) {
+    errors.push(`${file}: file name must be <chainId>.json`);
+    continue;
+  }
+  let d;
+  try {
+    d = JSON.parse(readFileSync(join(deploymentsDir, file), "utf8"));
+  } catch (err) {
+    errors.push(`${file}: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
+    continue;
+  }
+  const problems = [];
+  if (typeof d !== "object" || d === null || Array.isArray(d)) {
+    problems.push("not a JSON object");
+  } else {
+    if (!Number.isSafeInteger(d.chainId) || d.chainId <= 0) problems.push("chainId must be a positive integer");
+    else if (String(d.chainId) !== m[1]) problems.push(`chainId ${d.chainId} does not match the file name`);
+    if (typeof d.escrow !== "string" || !ADDRESS_RE.test(d.escrow)) problems.push("escrow must match /^0x[0-9a-fA-F]{40}$/");
+    if (typeof d.settler !== "string" || !ADDRESS_RE.test(d.settler)) problems.push("settler must match /^0x[0-9a-fA-F]{40}$/");
+    if (!Number.isSafeInteger(d.deployBlock) || d.deployBlock < 0) problems.push("deployBlock must be a non-negative safe integer");
+  }
+  if (problems.length > 0) {
+    errors.push(`${file}: ${problems.join("; ")}`);
+    continue;
+  }
+  if (d.chainId === LOCAL_CHAIN_ID && !includeLocal) {
+    console.log(`chain:sync: skipping ${file} (local Anvil; pass --include-local to export it)`);
+    continue;
+  }
+  entries.push({ chainId: d.chainId, escrow: d.escrow, settler: d.settler, deployBlock: d.deployBlock });
+}
+if (errors.length > 0) fail(`invalid deployment file(s):\n  ${errors.join("\n  ")}`);
+entries.sort((a, b) => a.chainId - b.chainId);
+
+// ---------- Write ----------
+
+const source = artifactPath === ifaceArtifact ? "IChargeMeshEscrow" : "ChargeMeshEscrow";
 writeFileSync(
   join(chainDir, "abi.ts"),
   `// AUTO-GENERATED by scripts/chain-sync.mjs from contracts/out (${source}). Do not edit.\n` +
     `export const chargeMeshEscrowAbi = ${JSON.stringify(abi, null, 2)} as const;\n`,
 );
-
-const deploymentsDir = join(contractsDir, "deployments");
-const entries = existsSync(deploymentsDir)
-  ? readdirSync(deploymentsDir)
-      .filter((f) => /^\d+\.json$/.test(f))
-      .map((f) => JSON.parse(readFileSync(join(deploymentsDir, f), "utf8")))
-      .sort((a, b) => a.chainId - b.chainId)
-  : [];
 
 const body = entries
   .map(
