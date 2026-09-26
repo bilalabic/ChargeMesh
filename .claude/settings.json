@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(corepack pnpm *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git worktree list *)",
+      "Bash(docker compose ps *)",
+      "PowerShell(corepack pnpm *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(git branch *)",
+      "PowerShell(git worktree list *)",
+      "PowerShell(docker compose ps *)",
+      "PowerShell(wsl.exe -d Ubuntu-24.04 -- bash -lc *forge build*)",
+      "PowerShell(wsl.exe -d Ubuntu-24.04 -- bash -lc *forge test*)",
+      "PowerShell(wsl.exe -d Ubuntu-24.04 -- bash -lc *forge fmt*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Bash(git push --force *)",
+      "PowerShell(git push --force *)",
+      "Bash(git reset --hard *)",
+      "PowerShell(git reset --hard *)"
+    ]
+  }
+}
