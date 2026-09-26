@@ -45,6 +45,10 @@ export class MockChainGateway implements ChainGateway {
       (DEMO_CONTRACT_ADDRESS as Address);
   }
 
+  async assertReady(): Promise<void> {
+    // Mock mode is process-local and is permitted only under NODE_ENV=test.
+  }
+
   async signQuote(quote: ReservationQuote): Promise<Hex> {
     const signature = await this.account.signTypedData(
       buildQuoteTypedData(quote, this.chainId, this.contractAddress),

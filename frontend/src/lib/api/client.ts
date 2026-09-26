@@ -11,7 +11,6 @@ import type {
   CreateReservationRequest,
   CreateReservationResponse,
   CreateSlotRequest,
-  DemoSeedResponse,
   EnergySlot,
   ListReservationsQuery,
   MatchesResponse,
@@ -24,14 +23,12 @@ import type {
 
 /**
  * Single API surface used by every component (docs/03-api.md).
- * Implemented by `live.ts` (fetch) and `mock.ts` (in-memory fixtures); callers never
- * know which one they got.
+ * Implemented by `live.ts`; every request goes to the Fastify backend.
  */
 export interface ApiClient {
   // ---------- System ----------
   config(): Promise<AppConfig>;
   chargers(): Promise<ChargerStatus[]>;
-  demoSeed(): Promise<DemoSeedResponse>;
 
   // ---------- Host ----------
   createNode(body: CreateNodeRequest): Promise<ChargingNode>;
@@ -58,11 +55,8 @@ export interface ApiClient {
   startSession(body: StartSessionRequest): Promise<ChargingSession>;
   getSession(id: string): Promise<ChargingSession>;
   stopSession(id: string): Promise<ChargingSession>;
-  /**
-   * SSE endpoint for `EventSource`. Returns `null` in mock mode, where there is no
-   * server: callers should poll `getSession` instead.
-   */
-  sessionEventsUrl(id: string, wallet: string): string | null;
+  /** SSE endpoint for the live Fastify event stream. */
+  sessionEventsUrl(id: string, wallet: string): string;
 }
 
 /** Error thrown by every ApiClient method; mirrors the API error body. */

@@ -7,7 +7,6 @@ import {
   ChargingNode,
   ChargingSession,
   CreateReservationResponse,
-  DemoSeedResponse,
   EnergySlot,
   MatchesResponse,
   ProofResponse,
@@ -85,8 +84,6 @@ export function createLiveApiClient(options: LiveApiClientOptions): ApiClient {
   return {
     config: () => get(routes.config(), AppConfig),
     chargers: () => get(routes.chargers(), z.array(ChargerStatus)),
-    demoSeed: () => post(routes.demoSeed(), DemoSeedResponse),
-
     createNode: (body) => post(routes.nodes(), ChargingNode, body),
     listMyNodes: () => get(`${routes.nodes()}?mine=true`, z.array(ChargingNode)),
     // ChargingNode first: zod strips unknown keys, so the public schema would also

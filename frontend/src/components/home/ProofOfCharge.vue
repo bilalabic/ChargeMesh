@@ -8,7 +8,7 @@ const serverItems = [
 
 const chainItems = [
   'Rezervasyon taahhüdü',
-  'Demo depozitosu / ödeme kilidi',
+  'Rezervasyon depozitosu / ödeme kilidi',
   'Oturum sonucu',
   'Hesaplaşma ve oturum verisinin özeti (hash)',
 ]
@@ -67,7 +67,7 @@ const chainItems = [
 
     <p class="mt-8 max-w-3xl text-sm leading-relaxed text-ink-500">
       Simülatörden gelen ölçüm, gerçek donanımdan bağımsız doğrulanmış enerji teslimi anlamına gelmez.
-      Bu demo yalnızca ölçüme dayalı kayıt ve hesaplaşma akışını gösterir.
+      Bu ekran ölçüme dayalı kayıt ve hesaplaşma akışını gösterir.
     </p>
   </section>
 </template>

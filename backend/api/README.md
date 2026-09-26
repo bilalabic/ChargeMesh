@@ -26,11 +26,11 @@ Simülatörü ayrı bir terminalde başlatmak için: `corepack pnpm dev:sim`
 
 | `CHAIN_MODE` | Ne olur | Ne zaman |
 | --- | --- | --- |
-| `mock` | Zincire hiç gidilmez. İmzalar gerçektir ama tx hash'leri sahtedir; `confirm` biçimi doğru her hash'i kabul eder. | Geliştirme ve testler |
+| `mock` | Zincire hiç gidilmez. İmzalar gerçektir ama tx hash'leri sahtedir; `confirm` biçimi doğru her hash'i kabul eder. | Yalnızca otomatik testler (`NODE_ENV=test`) |
 | `anvil` | WSL'deki yerel Anvil zinciri kullanılır (`http://localhost:8545`, chainId 31337). | Sözleşmeyle entegrasyon |
-| `monad` | Monad testnet kullanılır (chainId 10143). | Demo |
+| `monad` | Monad testnet kullanılır (chainId 10143). | Geliştirme ve production |
 
-Tüm zincir erişimi `src/chain/index.ts` içindeki `ChainGateway` arayüzünden geçer. Böylece mod değiştirmek iş mantığına dokunmayı gerektirmez.
+`CHAIN_MODE` çalışma zamanında zorunludur ve production yalnızca `monad` kabul eder; eksik ayar sessizce mock moda düşmez. API portları açmadan önce Atlas bağlantısını, RPC chain ID'sini, sözleşme bytecode'unu ve settler adresini doğrular. Tüm zincir erişimi `src/chain/index.ts` içindeki `ChainGateway` arayüzünden geçer.
 
 ## Settler anahtarı
 

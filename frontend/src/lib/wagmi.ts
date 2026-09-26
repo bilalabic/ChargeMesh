@@ -10,7 +10,7 @@ export const metaMaskConnector = injected({
 
 export const wagmiConfig = createConfig({
   chains: [monadTestnet, anvilLocal],
-  // The demo intentionally targets MetaMask. WalletConnect and other wallets are out of scope.
+  // ChargeMesh targets MetaMask. WalletConnect and other wallets are out of scope.
   connectors: [metaMaskConnector],
   transports: {
     [monadTestnet.id]: http(),

@@ -5,7 +5,10 @@ import type * as Shared from "@chargemesh/shared";
 const mocks = vi.hoisted(() => ({
   publicClient: {
     estimateContractGas: vi.fn(),
+    getBytecode: vi.fn(),
+    getChainId: vi.fn(),
     getTransactionCount: vi.fn(),
+    readContract: vi.fn(),
     simulateContract: vi.fn(),
   },
   walletClient: { writeContract: vi.fn() },
@@ -40,6 +43,9 @@ describe("ViemChainGateway transaction safety", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.publicClient.getTransactionCount.mockResolvedValue(7);
+    mocks.publicClient.getChainId.mockResolvedValue(10143);
+    mocks.publicClient.getBytecode.mockResolvedValue("0x6000");
+    mocks.publicClient.readContract.mockResolvedValue("0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A");
     mocks.publicClient.estimateContractGas.mockResolvedValue(100_001n);
     mocks.publicClient.simulateContract.mockResolvedValue({ request: { to: "0x0000000000000000000000000000000000000001" } });
     mocks.walletClient.writeContract.mockResolvedValue(HASH);
@@ -76,5 +82,23 @@ describe("ViemChainGateway transaction safety", () => {
     const result = await gateway.verifyReserveTx(HASH, RESERVATION);
     expect(mocks.waitForFinalized).toHaveBeenCalledWith(expect.anything(), { hash: HASH, timeoutMs: 60_000 });
     expect(result).toMatchObject({ ok: false });
+  });
+
+  it("checks the RPC chain, deployed bytecode and on-chain settler before startup", async () => {
+    const gateway = createViemChainGateway({
+      mode: "monad",
+      chainId: 10143,
+      rpcUrl: "http://localhost:8545",
+      settlerPrivateKey: KEY,
+    });
+
+    await expect(gateway.assertReady()).resolves.toBeUndefined();
+    expect(mocks.publicClient.getChainId).toHaveBeenCalledOnce();
+    expect(mocks.publicClient.getBytecode).toHaveBeenCalledWith({
+      address: "0x692Ee24f6CCeB942d2482e8c7405A8C46843DB98",
+    });
+    expect(mocks.publicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "settler" }),
+    );
   });
 });

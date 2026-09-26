@@ -43,9 +43,9 @@ Monad'da her hesabın bakiyesinde 10 MON'luk bir **reserve balance** tamponu bul
 - Cüzdana MON gönderildikten sonra ilk `reserve()` işleminden önce 1–2 saniye beklenir.
 - **Settler anahtarı**, testnet deploy anahtarıdır ve entegrasyon sorumlusunda durur. Demo bilgisayarına yalnızca elle, `backend/api/.env` dosyasındaki `SETTLER_PRIVATE_KEY` değişkeni olarak girilir. Git'e, sohbet kanallarına veya ekran paylaşımına girmez. Backend açılışta bu anahtarın adresini zincirdeki `settler()` değeriyle karşılaştırır; eşleşmezse çalışmaz.
 
-## Sabit demo verisi
+## Sabit prova verisi
 
-`POST /demo/seed` bu değerleri oluşturur. Fixture'lar da aynı değerleri kullanır (`shared/src/fixtures`).
+Bu değerler Host arayüzündeki **Yeni node** ve **Yeni slot yayınla** formlarından MongoDB Atlas'a kaydedilir. Normal canlı akışta frontend mock'u ve `/demo/seed` yardımcısı kullanılmaz.
 
 | Alan | Değer |
 | --- | --- |
@@ -60,21 +60,13 @@ Monad'da her hesabın bakiyesinde 10 MON'luk bir **reserve balance** tamponu bul
 
 ## Hazırlık: başlatma sırası
 
-Komutlar depo kökünde, PowerShell'de çalıştırılır. `backend/api/.env` içinde `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=true`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu olmalıdır. `frontend/.env.local` içinde `VITE_API_MODE=live`, `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` bulunur.
+Komutlar depo kökünde, PowerShell'de çalıştırılır. `backend/api/.env` içinde `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu olmalıdır. `frontend/.env.local` içinde `VITE_API_MODE=live`, `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` bulunur.
 
-1. **API'yi başlatın:** `corepack pnpm dev:backend`. REST `:4000`, OCPP `:9000` portunda açılır. MongoDB Atlas'a bağlanabilmesi için internet bağlantısı ve Atlas IP access list'te bu bilgisayarın IP adresi gerekir.
-2. **Demo verisini Elif adına oluşturun:**
-
-   ```powershell
-   curl.exe -X POST http://localhost:4000/api/v1/demo/seed -H "x-wallet-address: <ELİF_ADRESİ>"
-   ```
-
-   Yanıtta `node` ve `slot` döner; slotun durumu `OPEN` olmalıdır.
-3. **Simülatörü başlatın:** `corepack pnpm dev:sim`. Simülatörün `BootNotification` mesajı her zaman kabul edilir; konsolda `BootNotification: Accepted` görünür.
-4. **Frontend'i başlatın:** `corepack pnpm dev:frontend`. Elif profilinde Host panelini, Can profilinde Sürücü ekranını açın ve cüzdanları bağlayın. Host panelinde cihaz "Çevrimiçi" görünmelidir.
-5. **Ön kontrolü çalıştırın:** `.\scripts\preflight.ps1` (bkz. [Demo öncesi kontrol listesi](#demo-öncesi-kontrol-listesi)).
-
-`scripts/dev.ps1` API'yi, simülatörü ve frontend'i ayrı pencerelerde tek seferde başlatır. Bu betik kullanılıyorsa 2. adımdaki seed, API açıldıktan sonra ayrıca çalıştırılır.
+1. **Canlı sistemi başlatın:** `.\scripts\dev.ps1`. Betik Atlas indekslerini doğrular; API'yi Monad modunda, simülatörü ve frontend'i canlı API modunda açar; ardından ön kontrolü çalıştırır.
+2. **Cüzdanları bağlayın:** Elif ve Can profillerinde MetaMask bağlantısını açın, Monad testnet'i seçin. Uygulama yanlış ağdaysa ağ ekleme/değiştirme isteği gösterir.
+3. **Node'u Atlas'a kaydedin:** Elif Host panelinde **Yeni node** ile yukarıdaki sabit prova değerlerini girsin. `CHARGE_POINT_ID=CM-DEMO-001` değeriyle simülatör kaydı birebir eşleşmelidir.
+4. **Slot'u Atlas'a kaydedin:** Node ayrıntısında şu andan en az 30 dakika sonra başlayan, dört saatlik, 40 kWh ve 0,01 MON/kWh değerli yeni bir slot yayınlayın. Slot `OPEN`, cihaz "Çevrimiçi" görünmelidir.
+5. **Ön kontrolü gerektiğinde tekrarlayın:** `.\scripts\preflight.ps1 -DriverAddress <CAN_PUBLIC_ADRESİ>` (bkz. [Demo öncesi kontrol listesi](#demo-öncesi-kontrol-listesi)). Bu kontrol salt okunurdur.
 
 **Önceden açılacak explorer sekmeleri** (Can'ın profilinde):
 
@@ -122,16 +114,11 @@ Bu senaryo ürünün temel vaadini gösterir: **Ödeme talebe göre değil, ger�
 
 Tamamlanan (`settle` edilmiş) bir slot zincirde dolu kalır ve yeniden rezerve edilemez. Her provadan sonra:
 
-1. **Yeni slot açın:** `POST /demo/seed` isteğini Elif adına yeniden gönderin (yukarıdaki `curl.exe` komutu). Açık bir slot yoksa seed yeni bir `OPEN` slot oluşturur. Seed davranışının bu hale getirilmesi backend'in açık işleri arasındadır (bkz. [08-acik-isler.md](08-acik-isler.md)).
+1. **Yeni slot açın:** Elif'in Host ekranında aynı node için gelecekte başlayan yeni bir slot yayınlayın. Tamamlanmış slot yeniden kullanılamaz.
 2. **Simülatörü yeniden başlatın:** Simülatör penceresinde `Ctrl+C`, ardından `corepack pnpm dev:sim`.
 3. **Can'ın bakiyesini tamamlayın:** Ekip cüzdanından Can'a MON gönderin; bakiye 12 MON'un üstünde olmalıdır. Settler bakiyesinin 11 MON'un üstünde olduğunu da kontrol edin.
-4. **Veritabanını temizleyin (gerekirse):** Eski provaların kayıtları ekranda kalabalık yapıyorsa en güvenli yol yeni bir veritabanı adıdır. `backend/api/.env` içinde `MONGODB_DB_NAME` değerini değiştirin (ör. `chargemesh_demo2`), `corepack pnpm --filter @chargemesh/api db:indexes` çalıştırın, API'yi yeniden başlatın ve 1. adımdaki seed'i tekrarlayın. Eski veritabanını tamamen silmek isterseniz yalnızca demo veritabanında ve ekip onayıyla şu komutu kullanın:
+4. **Veritabanını temizlemeyin:** Normal canlı akışta geçmiş kayıtlar Atlas'ta kalır. Ayrı bir kontrollü prova veritabanı gerekirse yeni bir `MONGODB_DB_NAME` seçin, indeks komutunu çalıştırın ve node/slot kayıtlarını arayüzden yeniden oluşturun. Mevcut veritabanını silmeyin.
 
-   ```powershell
-   mongosh "<MONGODB_URI>" --eval 'db.getSiblingDB("chargemesh_demo").dropDatabase()'
-   ```
-
-   Bu işlem geri alınamaz. Atlas arayüzünden (**Browse Collections**) de yapılabilir.
 
 ## Hata tatbikatları
 
@@ -174,17 +161,17 @@ Testnet tamamen kullanılamıyorsa aynı akış yerel bir Anvil zincirinde oynat
 4. **Backend'i Anvil'e çevirin.** `backend/api/.env` içinde `CHAIN_MODE=anvil`, `SETTLER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` (Anvil #0) ve `RPC_URL=` (boş) yazın. Testnet settler anahtarını bu dosyadan silmeden önce güvenli bir yere not edin.
 5. **Frontend'i Anvil'e çevirin.** `frontend/.env.local` içinde `VITE_CHAIN_ID=31337` yazın ve `corepack pnpm dev:frontend` sürecini yeniden başlatın; Vite ortam değişkenlerini yalnızca açılışta okur.
 6. **MetaMask'ı hazırlayın.** İki profilde de bir "Anvil" ağı ekleyin: RPC `http://localhost:8545`, Chain ID `31337`, sembol `ETH`. Elif profiline Anvil #1 (`0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d`), Can profiline Anvil #2 (`0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a8d4ab8b0d0a`) anahtarını içe aktarın. Bu anahtarlar herkesçe bilinen Anvil test anahtarlarıdır; yalnızca yerel zincirde kullanılır. Anvil her yeniden başlatıldığında iki profilde de **Settings > Advanced > Clear activity tab data** ile nonce geçmişini sıfırlayın.
-7. **Temiz veritabanıyla başlayın.** `MONGODB_DB_NAME` değerini yeni bir adla değiştirin (ör. `chargemesh_anvil`), `corepack pnpm --filter @chargemesh/api db:indexes` çalıştırın, API'yi yeniden başlatın ve seed'i Elif'in Anvil adresiyle (`0x70997970C51812dc3A010C7d01b50e0d17dc79C8`) tekrarlayın.
+7. **Ayrı veritabanıyla başlayın.** `MONGODB_DB_NAME` değerini yeni bir adla değiştirin (ör. `chargemesh_anvil`), `corepack pnpm --filter @chargemesh/api db:indexes` çalıştırın ve API'yi yeniden başlatın. Elif'in Anvil adresiyle (`0x70997970C51812dc3A010C7d01b50e0d17dc79C8`) bağlanıp node ile slotu arayüzden oluşturun.
 
 ## Demo öncesi kontrol listesi
 
 - [ ] Bilgisayarın saati eşitlendi (**Settings > Time & language > Date & time > Sync now**). Teklifin geçerlilik süresi (`quoteExpiry`) bu saatle hesaplanır; saat kaymışsa `reserve()` `QuoteExpired` ile reddedilir.
 - [ ] İnternet bağlantısı var ve bu bilgisayarın IP adresi MongoDB Atlas IP access list'te kayıtlı. `db:indexes` başarıyla tamamlandı.
 - [ ] Sözleşme testnet'te deploy edildi ve doğrulandı; `getDeployment(10143)` güncel adresi (`{{ESCROW_ADDRESS}}`) döndürüyor.
-- [ ] `backend/api/.env`: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=true`, `SETTLER_PRIVATE_KEY` dolu.
+- [ ] `backend/api/.env`: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` dolu.
 - [ ] Bakiyeler: Can ≥ 12 MON, settler ≥ 11 MON.
 - [ ] `.\scripts\preflight.ps1` yeşil. Betik şunları kontrol eder: `GET /health` yanıt veriyor; `GET /config` `chainMode: "monad"` bildiriyor; `GET /chargers` simülatörü bağlı gösteriyor; settler bakiyesi en az 11 MON; zincirdeki `settler()` adresi `deployments` içindeki settler ile aynı.
 - [ ] Frontend `VITE_API_MODE=live` ve `VITE_CHAIN_ID=10143` ile çalışıyor; iki Chrome profilinde Elif ve Can cüzdanları bağlı ve Monad Testnet seçili.
-- [ ] Demo seed çalıştırıldı ve slot `OPEN` durumunda.
+- [ ] Host node'u ve gelecekte başlayan slot arayüzden Atlas'a kaydedildi; slot `OPEN` durumunda.
 - [ ] Explorer sekmeleri açık.
-- [ ] Yedek plan hazır: alternatif RPC adresi not edildi; Anvil adımları en az bir kez prova edildi.
+- [ ] Alternatif Monad testnet RPC adresi not edildi. Anvil yalnız geliştirici teşhisi için gerekirse ayrıca kullanılabilir.

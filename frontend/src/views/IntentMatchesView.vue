@@ -2,7 +2,7 @@
 import type { AppConfig, ChargeIntent, MatchResult } from "@chargemesh/shared";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import type { Address, Hex } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
 import NoticeBox from "../components/ui/NoticeBox.vue";
 import PageShell from "../components/ui/PageShell.vue";
 import { transactionErrorMessage, useEscrowTransactions } from "../composables/useEscrowTransactions";
@@ -21,8 +21,6 @@ const loading = ref(true);
 const reservingSlotId = ref("");
 const error = ref("");
 const notice = ref("");
-
-const MOCK_TX_HASH = `0x${"12".repeat(32)}` as Hex;
 
 async function load() {
   loading.value = true;
@@ -44,29 +42,41 @@ async function load() {
 }
 
 async function reserve(match: MatchResult) {
+  const currentConfig = config.value;
+  if (
+    !currentConfig ||
+    (currentConfig.chainMode !== "monad" && currentConfig.chainMode !== "anvil") ||
+    !currentConfig.contractAddress
+  ) {
+    error.value = "Backend gerçek bir zincir ve sözleşme yapılandırması bildirmedi.";
+    return;
+  }
   reservingSlotId.value = match.slotId;
   error.value = "";
   notice.value = "Teklif hazırlanıyor…";
   try {
     const created = await api.createReservation({ intentId: intentId.value, slotId: match.slotId });
-    let txHash: Hex = MOCK_TX_HASH;
-    if (config.value?.chainMode !== "mock") {
-      if (created.chainId !== 10143 && created.chainId !== 31337) {
-        throw new Error(`Desteklenmeyen zincir: ${created.chainId}`);
-      }
-      notice.value = "Cüzdan onayı bekleniyor…";
-      txHash = await escrow.reserve({
-        chainId: created.chainId,
-        contractAddress: created.contractAddress as Address,
-        quote: created.quote,
-        signature: created.signature as Hex,
-      });
+    if (created.chainId !== 10143 && created.chainId !== 31337) {
+      throw new Error(`Desteklenmeyen zincir: ${created.chainId}`);
     }
+    if (
+      created.chainId !== currentConfig.chainId ||
+      !isAddressEqual(created.contractAddress as Address, currentConfig.contractAddress as Address)
+    ) {
+      throw new Error("Rezervasyon teklifi backend yapılandırmasıyla uyuşmuyor.");
+    }
+    notice.value = "MetaMask onayı bekleniyor…";
+    const txHash = await escrow.reserve({
+      chainId: created.chainId,
+      contractAddress: created.contractAddress as Address,
+      quote: created.quote,
+      signature: created.signature as Hex,
+    });
     notice.value = "İşlem doğrulanıyor…";
     const confirmed = await api.confirmReservation(created.reservation.id, { txHash });
     await router.push(`/driver/reservations/${confirmed.id}`);
   } catch (cause) {
-    error.value = config.value?.chainMode === "mock" ? errorMessage(cause) : transactionErrorMessage(cause);
+    error.value = transactionErrorMessage(cause);
     notice.value = "";
   } finally {
     reservingSlotId.value = "";

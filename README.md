@@ -82,29 +82,44 @@ Genel git ayarını değiştirmek istemiyorsanız ayarı yalnızca bu klon için
 
 > pnpm'i `corepack` üzerinden çalıştırıyoruz. Böylece herkes `package.json` içinde sabitlenmiş sürümü (pnpm 10) kullanır ve ayrıca bir kurulum yapmak gerekmez.
 
-### Zincire bağlanmadan çalıştırmak
+### Canlı çalışma: Atlas + Monad + MetaMask
 
-Arayüzü tek başına, sahte verilerle görmek için (`VITE_API_MODE=mock`):
+Normal çalışma yolu mock kullanmaz. Kalıcı uygulama verisi MongoDB Atlas'a yazılır; rezervasyon MetaMask üzerinden Monad testnet'e gönderilir; `startSession` ve `settle` işlemlerini backend settler hesabı gönderir.
+
+Örnek dosyaları bir kez kopyalayın:
 
 ```powershell
+Copy-Item backend/api/.env.example backend/api/.env
 Copy-Item frontend/.env.example frontend/.env.local
-corepack pnpm dev:frontend          # adres terminalde yazar
 ```
 
-API'yi ve simülatörü zincir olmadan çalıştırmak için önce `backend/api/.env` dosyasında `MONGODB_URI` değerini Atlas bağlantı adresinizle doldurun:
+`backend/api/.env` içinde en az `MONGODB_URI` ve `SETTLER_PRIVATE_KEY` değerlerini kendiniz doldurun. Bu iki gizli değer yalnızca backend'de kalır; terminal çıktısına, frontend'e veya Vercel'e yazılmaz. Yerel canlı başlatma betiği aşağıdaki güvenli ayarları süreç seviyesinde zorlar:
+
+```dotenv
+CHAIN_MODE=monad
+DEMO_ALLOW_ANY_TIME=false
+VITE_API_MODE=live
+VITE_API_URL=http://localhost:4000/api/v1
+VITE_CHAIN_ID=10143
+```
+
+Ardından tüm sistemi depo kökünden başlatın:
 
 ```powershell
-Copy-Item backend/api/.env.example backend/api/.env     # CHAIN_MODE=mock; MONGODB_URI'yi doldurun
-corepack pnpm --filter @chargemesh/api db:indexes       # Atlas koleksiyon indeksleri
-corepack pnpm dev:backend                               # REST :4000, OCPP :9000
-corepack pnpm dev:sim                                   # ayrı bir terminalde
+.\scripts\dev.ps1
 ```
 
-API, veritabanına bağlanamasa da açılır; `/health`, `/config` ve `/chargers` uç noktaları bu durumda da yanıt verir. Veri isteyen uç noktalar için Atlas bağlantısı gerekir.
+Betik önce Atlas indekslerini doğrular, sonra API'yi açar ve API `chainMode: monad` bildirene kadar bekler. Ardından OCPP simülatörünü ve canlı API'ye bağlı frontend'i başlatıp salt okunur ön kontrolü çalıştırır. Betik `.env` dosyasının yalnızca varlığını kontrol eder; gizli değerleri okuyup ekrana basmaz.
 
-`scripts/dev.ps1` API'yi, simülatörü ve frontend'i ayrı pencerelerde tek komutla başlatır. `scripts/preflight.ps1` ise demo öncesinde API'nin, zincir ayarlarının, simülatör bağlantısının ve settler bakiyesinin hazır olduğunu kontrol eder.
+MetaMask'ta Monad testnet'i seçin ve frontend'deki **MetaMask'a bağlan** düğmesini kullanın. Host node ve slot kayıtları arayüzden oluşturulur; Sürücü rezervasyonu MetaMask'ta onaylar. Cüzdan parolası, private key veya seed phrase uygulamaya girilmez.
 
-Frontend'i canlı API'ye bağlamak için `frontend/.env.local` içinde `VITE_API_MODE=live`, `VITE_API_URL=http://localhost:4000/api/v1` ve `VITE_CHAIN_ID=10143` kullanın. Monad testnet ve yerel zincir (Anvil) adımları için [contracts/README.md](contracts/README.md) ve [docs/06-demo-senaryosu.md](docs/06-demo-senaryosu.md) belgelerine bakın.
+Ön kontrolü tekrar çalıştırmak ve Sürücü bakiyesini de doğrulamak için public cüzdan adresini verebilirsiniz:
+
+```powershell
+.\scripts\preflight.ps1 -DriverAddress 0x<SÜRÜCÜ_PUBLIC_ADRESİ>
+```
+
+Tüm env alanlarının açıklaması ve production değerleri [docs/09-deploy-ve-env.md](docs/09-deploy-ve-env.md) belgesindedir. Uçtan uca canlı prova [docs/06-demo-senaryosu.md](docs/06-demo-senaryosu.md) üzerinden yürütülür.
 
 ### Sık kullanılan komutlar
 

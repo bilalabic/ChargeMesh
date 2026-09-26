@@ -2,6 +2,30 @@
 
 Bu belge frontend, API, OCPP simülatörü ve sözleşme araçlarının kullandığı bütün ortam değişkenlerini tek yerde toplar. Gerçek `.env` dosyaları, özel anahtarlar ve MongoDB parolaları repoya eklenmez.
 
+## Çalışma modu politikası
+
+Kullanıcıya açılan normal akış yalnızca canlı moddur:
+
+- Frontend `VITE_API_MODE=live` ile Fastify API'ye bağlanır.
+- Backend `CHAIN_MODE=monad` ile Monad testnet'i kullanır.
+- Node, slot, intent, rezervasyon ve oturum kayıtları MongoDB Atlas'ta tutulur.
+- Sürücü `reserve`, `cancel`, `expire` ve `withdraw` işlemlerini MetaMask'ta onaylar.
+- Backend settler hesabı `startSession` ve `settle` işlemlerini gönderir.
+
+`mock` ve Anvil seçenekleri yalnız otomatik test veya geliştirici teşhisi içindir; normal yerel çalışma ve production deploy'da kullanılmaz. `DEMO_ALLOW_ANY_TIME=false` olmalıdır; zaman pencereleri gerçek saat kurallarına göre doğrulanır.
+
+## Yerel canlı başlangıç
+
+`backend/api/.env` dosyasını `.env.example` üzerinden oluşturun ve gerçek `MONGODB_URI` ile testnet `SETTLER_PRIVATE_KEY` değerlerini yalnızca bu dosyada doldurun. Ardından depo kökünde:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+Betik gizli değerleri okumaz veya yazdırmaz. Atlas indeks kontrolünü çalıştırır ve aşağıdaki public ayarları süreç seviyesinde zorlar: `CHAIN_MODE=monad`, `DEMO_ALLOW_ANY_TIME=false`, `VITE_API_MODE=live`, `VITE_CHAIN_ID=10143`. API Atlas'a bağlanıp Monad modunda hazır olmadan simülatör ve frontend aşamasına geçmez.
+
+Başlangıçtan sonra yapılan `scripts/preflight.ps1` kontrolü hiçbir işlem göndermez. API/chain yapılandırmasını, Atlas'a salt okunur erişimi, OCPP bağlantısını, deployment adreslerini, settler bakiyesini ve saat farkını denetler. İstenirse `-DriverAddress 0x...` ile Sürücü bakiyesi de kontrol edilir.
+
 ## Önce değiştirilecek değerler
 
 Production kurulumu için kullanıcı tarafından gerçek değerle değiştirilmesi gerekenler şunlardır:
@@ -77,7 +101,7 @@ DEMO_ALLOW_ANY_TIME=false
 | `SETTLER_PRIVATE_KEY` | Zorunlu, gizli | EIP-712 tekliflerini imzalar, `startSession` ve `settle` gönderir. Yalnız testnet hesabı kullanılır. |
 | `QUOTE_TTL_SECONDS` | İsteğe bağlı | Varsayılan `300`; 30–3600 saniye aralığı kabul edilir. |
 | `RECONCILIATION_INTERVAL_MS` | İsteğe bağlı | Varsayılan `30000`; 5000–300000 ms aralığı kabul edilir. |
-| `DEMO_ALLOW_ANY_TIME` | Önerilir | Production için `false`; yalnız kontrollü prova gerekirse geçici olarak `true`. |
+| `DEMO_ALLOW_ANY_TIME` | Zorunlu | Yerel canlı çalışma ve production için `false`; gerçek slot zaman kuralları uygulanır. |
 
 Hosting platformu tek bir public port destekliyorsa mevcut iki-portlu API/OCPP düzeni deploy edilmeden önce çözülmelidir. OCPP bağlantısı sıradan kısa süreli HTTP fonksiyonu değil, kalıcı WebSocket bağlantısı ister.
 

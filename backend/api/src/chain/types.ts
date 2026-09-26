@@ -63,6 +63,8 @@ export interface ChainGateway {
   /** Escrow address used as EIP-712 verifyingContract and reserve() target. */
   readonly contractAddress: Address;
   readonly settlerAddress: Address;
+  /** Fails startup unless the configured RPC, deployment and settler agree. */
+  assertReady(): Promise<void>;
   /** EIP-712 signature over `buildQuoteTypedData(quote, chainId, contractAddress)`. */
   signQuote(quote: ReservationQuote): Promise<Hex>;
   /**

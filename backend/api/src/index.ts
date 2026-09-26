@@ -34,8 +34,14 @@ async function main(): Promise<void> {
   const chain = createChainGateway(config);
   if (!config.mongoUri) throw new ConfigError("MONGODB_URI is required");
   const store = new MongoStore(config.mongoUri, config.mongoDbName);
-  await store.connect();
-  await store.ensureIndexes();
+  try {
+    await store.connect();
+    await store.ensureIndexes();
+    await chain.assertReady();
+  } catch (err) {
+    await store.close().catch(() => undefined);
+    throw err;
+  }
   const chargers = new ChargerRegistry();
   const events = new SessionEventBus();
   const sessions = new ChargingSessionService(store, chain, events, config);
@@ -86,8 +92,8 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => void shutdown("SIGINT"));
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
-  await app.listen({ port: config.port, host: "localhost" });
   await ocpp.start();
+  await app.listen({ port: config.port, host: "0.0.0.0" });
 }
 
 main().catch((err: unknown) => {

@@ -19,17 +19,14 @@ Entegrasyon için değişmeyecek noktalar:
 
 | Değişken | Örnek | Açıklama |
 | --- | --- | --- |
-| `VITE_API_URL` | `http://localhost:4000/api/v1` | Yalnızca `live` modda kullanılır |
-| `VITE_API_MODE` | `mock` | `mock` veya `live` |
+| `VITE_API_URL` | `http://localhost:4000/api/v1` | Fastify API kök adresi |
 | `VITE_CHAIN_ID` | `10143` | wagmi'nin varsayılan ağı (`31337` veya `10143`) |
 
 ## Mimari kurallar
 
 - **Veri tipleri** yalnızca `@chargemesh/shared` paketinden gelir. API yanıtları `src/lib/api/` içindeki tek bir istemciden geçer ve ilgili zod şemasıyla `parse` edilir.
-- **İki mod** (`VITE_API_MODE`):
-  - `mock`: `src/lib/api/mock.ts`, `createDemoFixtures()` ve `rankMatches()` ile çalışır; zincir kimliği `31337`'dir. Bileşenler hangi modda olduklarını bilmez; iki istemci de aynı `ApiClient` arayüzünü uygular.
-  - `live`: `fetch` ile `VITE_API_URL`. Her isteğe `x-wallet-address` başlığı eklenir (`WALLET_HEADER`).
-- **Zincir bilgisi:** `live` modda `chainId`, `contractAddress` ve `explorerUrl` **yalnızca** `GET /config` yanıtından alınır. `VITE_CHAIN_ID` yalnızca wagmi'nin varsayılan ağıdır; `/config` ile uyuşmazsa uyarı gösterilir ve cüzdandan ağ değiştirmesi istenir. `mock` modda adres `getDeployment(chainId)` ile okunur. `/config` yanıtı `chainMode: "mock"` ise cüzdan açılmaz, sahte bir tx hash'iyle doğrudan `confirm` çağrılır (bkz. `docs/02-mimari.md`).
+- **API:** Tek çalışma biçimi `fetch` ile `VITE_API_URL` adresindeki Fastify backend'e bağlanmaktır. Her isteğe `x-wallet-address` başlığı eklenir (`WALLET_HEADER`). Tarayıcı içi mock istemci veya sahte işlem hash'i kullanılmaz.
+- **Zincir bilgisi:** `chainId`, `contractAddress` ve `explorerUrl` **yalnızca** `GET /config` yanıtından alınır. `VITE_CHAIN_ID` yalnızca beklenen varsayılan ağdır; `/config` ile uyuşmazsa uyarı gösterilir ve cüzdandan backend'in bildirdiği ağa geçmesi istenir. Backend `chainMode: "mock"` bildirirse işlem yapılmaz ve yapılandırma hatası gösterilir.
 - **Cüzdan:** `@wagmi/vue` `WagmiPlugin` + `createConfig({ chains: [monadTestnet, anvilLocal], connectors: [injected()] })`; ağ tanımları shared'dan gelir. `VueQueryPlugin` ayrıca kurulur. WalletConnect ve RainbowKit kapsam dışıdır.
 
 ### Rezervasyon akışı (`reserve`)
@@ -48,11 +45,11 @@ Cüzdandaki kullanıcı reddi `decodeEscrowError` tarafından tanınmaz (`null` 
 - **Depozitoyu geri al (`expire`):** Düğme `CONFIRMED` rezervasyonlarda `window.endsAt` geçince, `ACTIVE`, `COMPLETED` ve `FAILED` rezervasyonlarda `window.endsAt + 1 gün` geçince görünür. İşlem onaylanınca `POST /reservations/:id/sync` çağrılır.
 - **İptal (`cancel`):** Başlangıçtan önce Sürücü'ye sunulur, ardından `sync` çağrılır.
 - Bu işlemler de aynı kurala uyar: önce simülasyon, açık gaz sınırı, `decodeEscrowError` ile Türkçe hata.
-- **Explorer bağlantıları:** `explorerTxUrl(chainId, hash)` ve `explorerAddressUrl` ile üretilir; `null` dönerse (anvil, mock) bağlantı gösterilmez.
+- **Explorer bağlantıları:** `explorerTxUrl(chainId, hash)` ve `explorerAddressUrl` ile üretilir; `null` dönerse (anvil) bağlantı gösterilmez.
 
 ### Canlı oturum ve Proof
 
-- **SSE:** ``new EventSource(`${API_URL}/sessions/${id}/events?wallet=0x…`)``. Olaylar: `session.updated`, `meter`, `settled`, `session.error`. `settled` gelince bağlantı kapatılır. Mock modda sayaç zamanlayıcıyla simüle edilir.
+- **SSE:** ``new EventSource(`${API_URL}/sessions/${id}/events?wallet=0x…`)``. Olaylar: `session.updated`, `meter`, `settled`, `session.error`. `settled` gelince bağlantı kapatılır.
 - **Proof of Charge ekranı:** `computeSessionHash(summary)` tarayıcıda yeniden hesaplanır ve zincirdeki hash ile karşılaştırılır. `onchain` `null` ise (henüz `SETTLED` değil) "Hesaplaşma bekleniyor" gösterilir.
 - Para ve enerji gösterimi için `formatMon` ve `whToKwh` kullanılır. Para hesabı `number` ile yapılmaz. Eşleşme kartındaki "karşılanabilir kWh" değeri `quotedWh`'tir.
 
@@ -61,16 +58,16 @@ Cüzdandaki kullanıcı reddi `decodeEscrowError` tarafından tanınmaz (`null` 
 | Yol | Rol | İçerik |
 | --- | --- | --- |
 | `/` | – | Ürünün tek cümlelik anlatımı, "Host olarak devam et" ve "Sürücü olarak devam et" seçenekleri, cüzdan bağlama |
-| `/host` | Host | Node listesi, her node için çevrimiçi durumu ve slotlar; "Demo verisi oluştur" (`POST /demo/seed`) |
+| `/host` | Host | Node listesi, her node için çevrimiçi durumu ve slotlar |
 | `/host/nodes/new` | Host | Node formu (`CreateNodeRequest`) |
 | `/host/nodes/:nodeId` | Host | Slot yayınlama formu, slot listesi, gelen rezervasyonlar, QR görseli (`startUrl`) |
-| `/driver` | Sürücü | Intent formu: konum (demo için hazır konum seçenekleri + enlem/boylam), varış, ayrılış, kWh, bağlantı tipi |
+| `/driver` | Sürücü | Intent formu: konum (hazır konum seçenekleri + enlem/boylam), varış, ayrılış, kWh, bağlantı tipi |
 | `/driver/intents/:intentId` | Sürücü | Sıralı eşleşmeler; kart başına bölge, mesafe, pencere, karşılanabilir kWh (`quotedWh`), depozito; "Rezerve et" |
 | `/driver/reservations/:id` | Sürücü | Durum zaman çizelgesi, explorer bağlantıları, erişim bilgisi (onaydan sonra), "Şarjı başlat", canlı sayaç, "Durdur", hesaplaşma sonucu, gerektiğinde "Depozitoyu geri al" |
 | `/start?cp=…&c=…` | Sürücü | QR'daki başlatma bağlantısı: bu noktadaki rezervasyonu bulur ve oturumu başlatır |
 | `/reservations/:id/proof` | İkisi | Proof of Charge: özet, kanonik JSON, hash doğrulaması, zincir tutarları |
 
-Arayüz metinleri Türkçedir. Demo tek dizüstü bilgisayarda yapılır: QR, Host ekranında yalnızca görsel olarak durur; Sürücü aynı tarayıcıda "Şarjı başlat" düğmesine basar veya `/start` bağlantısını açar. Telefon desteği gerekmez, ancak dar ekranda düzen bozulmamalıdır.
+Arayüz metinleri Türkçedir. Sunum tek dizüstü bilgisayarda yapılabilir: QR, Host ekranında görsel olarak durur; Sürücü aynı tarayıcıda "Şarjı başlat" düğmesine basar veya `/start` bağlantısını açar. Telefon desteği gerekmez, ancak dar ekranda düzen bozulmamalıdır.
 
 ## Komutlar
 
@@ -86,4 +83,4 @@ corepack pnpm --filter @chargemesh/frontend build
 
 ## Bitti tanımı (M1)
 
-Mock modda `docs/06-demo-senaryosu.md` içindeki 7 adım, API ve zincir olmadan tarayıcıda baştan sona oynatılabilir. `typecheck`, `lint`, `test` ve `build` yeşildir.
+Fastify API, MongoDB Atlas ve seçili zincir ile uçtan uca akış çalışır. `typecheck`, `lint`, `test` ve `build` yeşildir.

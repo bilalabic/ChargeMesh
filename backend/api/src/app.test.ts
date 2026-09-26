@@ -85,15 +85,43 @@ describe("error format", () => {
 });
 
 describe("config", () => {
-  it("defaults to CHAIN_MODE=mock", () => {
+  it("defaults to CHAIN_MODE=mock only in tests", () => {
     expect(loadConfig({ NODE_ENV: "test" }).chainMode).toBe("mock");
+    expect(() => loadConfig({ NODE_ENV: "development", MONGODB_URI: "mongodb+srv://example/" })).toThrow(
+      /CHAIN_MODE/,
+    );
   });
 
   it("fails fast on invalid values", () => {
     expect(() => loadConfig({ PORT: "not-a-port" })).toThrow(/PORT/);
     expect(() => loadConfig({ CHAIN_MODE: "mainnet" })).toThrow(/CHAIN_MODE/);
     expect(() => loadConfig({ CHAIN_MODE: "monad" })).toThrow(/SETTLER_PRIVATE_KEY/);
-    expect(() => loadConfig({ NODE_ENV: "development" })).toThrow(/MONGODB_URI/);
+    expect(() => loadConfig({ NODE_ENV: "development", CHAIN_MODE: "mock" })).toThrow(/only allowed/);
+    expect(() => loadConfig({ NODE_ENV: "development", CHAIN_MODE: "monad" })).toThrow(/SETTLER_PRIVATE_KEY/);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "development",
+        CHAIN_MODE: "monad",
+        SETTLER_PRIVATE_KEY: `0x${"11".repeat(32)}`,
+      }),
+    ).toThrow(/MONGODB_URI/);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "production",
+        CHAIN_MODE: "anvil",
+        MONGODB_URI: "mongodb+srv://example/",
+        SETTLER_PRIVATE_KEY: `0x${"11".repeat(32)}`,
+      }),
+    ).toThrow(/requires CHAIN_MODE=monad/);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "development",
+        CHAIN_MODE: "monad",
+        MONGODB_URI: "mongodb+srv://example/",
+        SETTLER_PRIVATE_KEY: `0x${"11".repeat(32)}`,
+        DEMO_ALLOW_ANY_TIME: "true",
+      }),
+    ).toThrow(/only allowed/);
   });
 
   it("validates Monad live-mode config without sending a transaction", () => {

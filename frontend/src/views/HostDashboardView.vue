@@ -13,7 +13,6 @@ const nodes = ref<ChargingNode[]>([]);
 const reservations = ref<Reservation[]>([]);
 const chargers = ref<ChargerStatus[]>([]);
 const loading = ref(true);
-const seeding = ref(false);
 const error = ref("");
 
 const onlineCount = computed(() => nodes.value.filter((node) => node.online).length);
@@ -33,19 +32,6 @@ async function load() {
   }
 }
 
-async function seedDemo() {
-  seeding.value = true;
-  error.value = "";
-  try {
-    await api.demoSeed();
-    await load();
-  } catch (cause) {
-    error.value = errorMessage(cause);
-  } finally {
-    seeding.value = false;
-  }
-}
-
 onMounted(load);
 </script>
 
@@ -56,9 +42,6 @@ onMounted(load);
     description="Node durumunu izleyin, uygun saatleri slot olarak açın ve gelen rezervasyonları tek yerden takip edin."
   >
     <template #actions>
-      <button class="button-secondary" type="button" :disabled="seeding" @click="seedDemo">
-        {{ seeding ? "Hazırlanıyor…" : "Demo verisi oluştur" }}
-      </button>
       <RouterLink class="button-primary" to="/host/nodes/new">Yeni node</RouterLink>
     </template>
 
@@ -97,7 +80,7 @@ onMounted(load);
     </div>
     <div v-else-if="!loading" class="empty-card">
       <h2 class="text-xl font-semibold text-ink-100">Henüz node yok</h2>
-      <p class="mt-2 text-ink-400">Demo verisini oluşturun veya ilk şarj noktanızı ekleyin.</p>
+      <p class="mt-2 text-ink-400">İlk şarj noktanızı ekleyerek başlayın.</p>
     </div>
 
     <section v-if="reservations.length" class="mt-12">

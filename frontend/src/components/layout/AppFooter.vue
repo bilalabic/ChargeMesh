@@ -19,7 +19,7 @@ const year = new Date().getFullYear()
         </div>
 
         <div class="text-sm text-ink-400 sm:text-right">
-          <p>Monad testnet üzerinde çalışan hackathon demosu.</p>
+          <p>Monad testnet üzerinde çalışan şarj rezervasyon ağı.</p>
           <p class="mt-1">Hackathon sürümü gerçek şarj hizmeti sunmaz.</p>
         </div>
       </div>

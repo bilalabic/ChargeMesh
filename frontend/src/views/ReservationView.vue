@@ -47,6 +47,12 @@ const canExpire = computed(() => {
   if (item.status === "CONFIRMED") return Date.now() > end;
   return ["ACTIVE", "COMPLETED", "FAILED"].includes(item.status) && Date.now() > end + SETTLEMENT_GRACE_MS;
 });
+const chainReady = computed(
+  () =>
+    (config.value?.chainMode === "monad" || config.value?.chainMode === "anvil") &&
+    Boolean(config.value.contractAddress) &&
+    (config.value.chainId === 10143 || config.value.chainId === 31337),
+);
 
 async function refresh() {
   try {
@@ -209,8 +215,8 @@ onBeforeUnmount(stopUpdates);
         <div class="flex flex-wrap gap-3">
           <button v-if="canStart" class="button-primary" type="button" :disabled="busy" @click="startSession">Şarjı başlat</button>
           <button v-if="canStop" class="button-secondary" type="button" :disabled="busy" @click="stopSession">Şarjı durdur</button>
-          <button v-if="canCancel && config?.chainMode !== 'mock'" class="button-danger" type="button" :disabled="busy" @click="chainAction('cancel')">Rezervasyonu iptal et</button>
-          <button v-if="canExpire && config?.chainMode !== 'mock'" class="button-danger" type="button" :disabled="busy" @click="chainAction('expire')">Depozitoyu geri al</button>
+          <button v-if="canCancel && chainReady" class="button-danger" type="button" :disabled="busy" @click="chainAction('cancel')">Rezervasyonu iptal et</button>
+          <button v-if="canExpire && chainReady" class="button-danger" type="button" :disabled="busy" @click="chainAction('expire')">Depozitoyu geri al</button>
         </div>
       </div>
 

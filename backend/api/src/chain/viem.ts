@@ -115,6 +115,27 @@ export function createViemChainGateway(opts: ViemChainGatewayOptions): ChainGate
     contractAddress: escrow,
     settlerAddress: account.address,
 
+    async assertReady(): Promise<void> {
+      const rpcChainId = await publicClient.getChainId();
+      if (rpcChainId !== opts.chainId) {
+        throw new Error(`RPC chain id ${rpcChainId} does not match configured chain id ${opts.chainId}`);
+      }
+      const bytecode = await publicClient.getBytecode({ address: escrow });
+      if (!bytecode || bytecode === "0x") {
+        throw new Error(`ChargeMeshEscrow is not deployed at ${escrow} on chain ${opts.chainId}`);
+      }
+      const onchainSettler = await publicClient.readContract({
+        address: escrow,
+        abi: chargeMeshEscrowAbi,
+        functionName: "settler",
+      });
+      if (!isAddressEqual(onchainSettler, account.address)) {
+        throw new Error(
+          `SETTLER_PRIVATE_KEY resolves to ${account.address}, but the contract settler is ${onchainSettler}`,
+        );
+      }
+    },
+
     async signQuote(quote: ReservationQuote): Promise<Hex> {
       return account.signTypedData(buildQuoteTypedData(quote, opts.chainId, escrow));
     },

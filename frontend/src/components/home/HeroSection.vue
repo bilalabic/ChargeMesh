@@ -47,7 +47,7 @@ onMounted(async () => {
           <span class="relative flex h-2 w-2">
             <span class="animate-pulse-soft absolute inline-flex h-full w-full rounded-full bg-volt-400" />
           </span>
-          Monad testnet · hackathon demo
+          Monad testnet · doğrulanabilir şarj ağı
         </div>
 
         <h1

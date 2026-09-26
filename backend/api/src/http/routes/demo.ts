@@ -14,7 +14,7 @@ import type { RouteDeps } from "./deps";
 
 export function demoRoutes(deps: RouteDeps): FastifyPluginAsync {
   return async (app) => {
-    if (deps.config.nodeEnv === "production") return;
+    if (deps.config.nodeEnv !== "test" || deps.config.chainMode !== "mock") return;
 
     app.post("/demo/seed", async (request) => {
       const wallet = requireWallet(request);

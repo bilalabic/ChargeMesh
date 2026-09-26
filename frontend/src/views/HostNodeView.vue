@@ -144,7 +144,7 @@ onMounted(load);
         <p class="font-mono text-xs uppercase tracking-wider text-ember-300">Başlatma QR'ı</p>
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="Şarj başlatma QR kodu" class="mx-auto mt-5 w-full max-w-60 rounded-xl" />
         <p class="mt-4 break-all font-mono text-xs text-ink-400">{{ node.startUrl }}</p>
-        <p class="mt-4 text-sm text-ink-300">Demoda QR görsel olarak gösterilir; Sürücü aynı bilgisayardaki rezervasyon ekranından başlatır.</p>
+        <p class="mt-4 text-sm text-ink-300">Sürücü bu QR kodunu tarayarak veya rezervasyon ekranını kullanarak şarjı başlatabilir.</p>
       </aside>
     </div>
   </PageShell>

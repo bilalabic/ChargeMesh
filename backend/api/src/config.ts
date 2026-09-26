@@ -7,6 +7,13 @@ import { z } from "zod";
 
 const Port = z.coerce.number().int().min(1).max(65_535);
 
+const HttpUrl = z.url().superRefine((value, ctx) => {
+  const url = new URL(value);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    ctx.addIssue({ code: "custom", message: "must use http:// or https://" });
+  }
+});
+
 /** Treats empty strings as "not set" so `.env` lines like `FOO=` fall back to defaults. */
 const optionalString = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
@@ -21,11 +28,13 @@ const EnvSchema = z.object({
     z.string().regex(/^mongodb(\+srv)?:\/\//, "MONGODB_URI must be a mongodb:// or mongodb+srv:// URI"),
   ),
   MONGODB_DB_NAME: z.string().trim().regex(/^[A-Za-z0-9_-]{1,63}$/).default("chargemesh"),
-  WEB_BASE_URL: z.url().default("http://localhost:3000"),
-  CHAIN_MODE: ChainMode.default("mock"),
-  RPC_URL: optionalString(z.url()),
+  WEB_BASE_URL: HttpUrl.default("http://localhost:3000"),
+  CHAIN_MODE: ChainMode,
+  RPC_URL: optionalString(HttpUrl),
   SETTLER_PRIVATE_KEY: optionalString(
-    z.string().regex(/^0x[0-9a-fA-F]{64}$/, "SETTLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex"),
+    z.string()
+      .regex(/^0x[0-9a-fA-F]{64}$/, "SETTLER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex")
+      .refine((value) => !/^0x0{64}$/i.test(value), "SETTLER_PRIVATE_KEY cannot be the zero key"),
   ),
   QUOTE_TTL_SECONDS: z.coerce.number().int().min(30).max(3_600).default(300),
   RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(5_000).max(300_000).default(30_000),
@@ -61,12 +70,25 @@ export class ConfigError extends Error {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
-  const parsed = EnvSchema.safeParse(env);
+  // Tests may omit CHAIN_MODE for convenience. Every runnable environment must
+  // choose a chain explicitly so a missing variable can never enable mock mode.
+  const normalizedEnv = env.NODE_ENV === "test" && !env.CHAIN_MODE
+    ? { ...env, CHAIN_MODE: "mock" }
+    : env;
+  const parsed = EnvSchema.safeParse(normalizedEnv);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`);
     throw new ConfigError(`Invalid environment configuration:\n${lines.join("\n")}`);
   }
   const e = parsed.data;
+
+  if (e.CHAIN_MODE === "mock" && e.NODE_ENV !== "test") {
+    throw new ConfigError("CHAIN_MODE=mock is only allowed when NODE_ENV=test");
+  }
+
+  if (e.NODE_ENV === "production" && e.CHAIN_MODE !== "monad") {
+    throw new ConfigError("Production requires CHAIN_MODE=monad");
+  }
 
   if (e.CHAIN_MODE !== "mock" && !e.SETTLER_PRIVATE_KEY) {
     throw new ConfigError(`SETTLER_PRIVATE_KEY is required when CHAIN_MODE=${e.CHAIN_MODE}`);
@@ -74,6 +96,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
 
   if (e.NODE_ENV !== "test" && !e.MONGODB_URI) {
     throw new ConfigError("MONGODB_URI is required unless NODE_ENV=test");
+  }
+
+  if (e.NODE_ENV === "production" && !e.RPC_URL) {
+    throw new ConfigError("RPC_URL is required in production");
+  }
+
+  if (e.NODE_ENV === "production" && new URL(e.WEB_BASE_URL).protocol !== "https:") {
+    throw new ConfigError("WEB_BASE_URL must use https:// in production");
+  }
+
+  if (e.NODE_ENV === "production" && e.RPC_URL && new URL(e.RPC_URL).protocol !== "https:") {
+    throw new ConfigError("RPC_URL must use https:// in production");
+  }
+
+  if (e.NODE_ENV !== "test" && e.DEMO_ALLOW_ANY_TIME) {
+    throw new ConfigError("DEMO_ALLOW_ANY_TIME=true is only allowed when NODE_ENV=test");
   }
 
   const defaultRpc =
@@ -96,7 +134,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfigEnv {
     settlerPrivateKey: (e.SETTLER_PRIVATE_KEY as `0x${string}` | undefined) ?? null,
     quoteTtlSeconds: e.QUOTE_TTL_SECONDS,
     reconciliationIntervalMs: e.RECONCILIATION_INTERVAL_MS,
-    // Local dev defaults to true (avoids clock skew during demos); production defaults to false.
-    demoAllowAnyTime: e.DEMO_ALLOW_ANY_TIME ?? e.NODE_ENV !== "production",
+    demoAllowAnyTime: e.DEMO_ALLOW_ANY_TIME ?? e.NODE_ENV === "test",
   };
 }

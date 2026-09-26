@@ -7,7 +7,6 @@ import type { Address } from "viem";
 import NoticeBox from "../ui/NoticeBox.vue";
 import { transactionErrorMessage, useEscrowTransactions } from "../../composables/useEscrowTransactions";
 import { getApiClient } from "../../lib/api";
-import { env } from "../../lib/env";
 import BrandMark from "./BrandMark.vue";
 import WalletButton from "./WalletButton.vue";
 
@@ -27,6 +26,9 @@ const chainId = computed(() => {
   return id === 10143 || id === 31337 ? id : undefined;
 });
 const contractAddress = computed(() => config.value?.contractAddress as Address | undefined);
+const isLiveChain = computed(
+  () => config.value?.chainMode === "monad" || config.value?.chainMode === "anvil",
+);
 const pendingQuery = useReadContract(
   computed({
     get: () => ({
@@ -37,8 +39,7 @@ const pendingQuery = useReadContract(
       chainId: chainId.value,
       query: {
         enabled: Boolean(
-          env.apiMode === "live" &&
-            config.value?.chainMode !== "mock" &&
+          isLiveChain.value &&
             contractAddress.value &&
             chainId.value &&
             account.address.value,
@@ -89,9 +90,6 @@ onMounted(loadConfig);
       </RouterLink>
 
       <div class="flex items-center gap-3">
-        <span class="hidden rounded-full border border-ink-700 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-ink-400 sm:block">
-          {{ env.apiMode }}
-        </span>
         <nav class="hidden items-center gap-5 md:flex" aria-label="Ana menü">
           <RouterLink
             v-for="link in links"
