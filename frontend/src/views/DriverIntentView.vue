@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import type { AccessType, ConnectorType } from "@chargemesh/shared";
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import NoticeBox from "../components/ui/NoticeBox.vue";
 import PageShell from "../components/ui/PageShell.vue";
 import { getApiClient } from "../lib/api";
+import {
+  DEFAULT_LOCATION,
+  LOCATION_OPTIONS,
+  districtsFor,
+  neighborhoodsFor,
+  resolveLocation,
+} from "../lib/locations";
 import { errorMessage, toLocalInput } from "../lib/presentation";
 
 const api = getApiClient();
@@ -12,9 +19,8 @@ const router = useRouter();
 const saving = ref(false);
 const error = ref("");
 const now = new Date(Date.now() + 5 * 60_000);
+const location = reactive({ ...DEFAULT_LOCATION });
 const form = reactive({
-  lat: 40.9875,
-  lng: 29.03,
   radiusKm: 3,
   arriveAt: toLocalInput(now),
   departAt: toLocalInput(new Date(now.getTime() + 4 * 3_600_000)),
@@ -22,6 +28,18 @@ const form = reactive({
   connectorType: "TYPE2" as ConnectorType,
   acceptedAccessTypes: ["OPEN_PARKING", "GATED_PARKING", "BUILDING_GARAGE"] as AccessType[],
 });
+
+const districtOptions = computed(() => districtsFor(location.city));
+const neighborhoodOptions = computed(() => neighborhoodsFor(location.city, location.district));
+
+function selectCity() {
+  location.district = districtOptions.value[0]?.name ?? "";
+  selectDistrict();
+}
+
+function selectDistrict() {
+  location.neighborhood = neighborhoodOptions.value[0]?.name ?? "";
+}
 
 const accessOptions: { value: AccessType; label: string }[] = [
   { value: "OPEN_PARKING", label: "Açık otopark" },
@@ -33,9 +51,11 @@ async function submit() {
   saving.value = true;
   error.value = "";
   try {
+    const coordinates = resolveLocation(location);
+    if (!coordinates) throw new Error("Lütfen geçerli bir şehir, ilçe ve mahalle seçin.");
     const intent = await api.createIntent({
-      lat: form.lat,
-      lng: form.lng,
+      lat: coordinates.lat,
+      lng: coordinates.lng,
       radiusKm: form.radiusKm,
       arriveAt: new Date(form.arriveAt).toISOString(),
       departAt: new Date(form.departAt).toISOString(),
@@ -62,8 +82,24 @@ async function submit() {
       <NoticeBox v-if="error" kind="error">{{ error }}</NoticeBox>
       <div class="rounded-2xl border border-ink-700 bg-ink-900/60 p-6 sm:p-8">
         <div class="form-grid">
-          <label class="field"><span>Hedef enlem</span><input v-model.number="form.lat" type="number" step="0.0001" required /></label>
-          <label class="field"><span>Hedef boylam</span><input v-model.number="form.lng" type="number" step="0.0001" required /></label>
+          <label class="field">
+            <span>Şehir</span>
+            <select v-model="location.city" required @change="selectCity">
+              <option v-for="city in LOCATION_OPTIONS" :key="city.name" :value="city.name">{{ city.name }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>İlçe</span>
+            <select v-model="location.district" required @change="selectDistrict">
+              <option v-for="district in districtOptions" :key="district.name" :value="district.name">{{ district.name }}</option>
+            </select>
+          </label>
+          <label class="field sm:col-span-2">
+            <span>Mahalle</span>
+            <select v-model="location.neighborhood" required>
+              <option v-for="neighborhood in neighborhoodOptions" :key="neighborhood.name" :value="neighborhood.name">{{ neighborhood.name }}</option>
+            </select>
+          </label>
           <label class="field"><span>Varış</span><input v-model="form.arriveAt" type="datetime-local" required /></label>
           <label class="field"><span>Ayrılış</span><input v-model="form.departAt" type="datetime-local" required /></label>
           <label class="field"><span>Enerji ihtiyacı (kWh)</span><input v-model.number="form.requestedKwh" type="number" min="1" max="100" step="0.1" required /></label>
