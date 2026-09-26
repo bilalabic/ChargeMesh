@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   typescript:
-    name: TypeScript (shared, web, api, charger-sim)
+    name: TypeScript (frontend, backend, shared)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,7 +28,7 @@ jobs:
         run: pnpm lint
       - name: Test
         run: pnpm test
-      - name: Build web
+      - name: Build frontend
         run: pnpm --filter @chargemesh/frontend build
 
   contracts:
