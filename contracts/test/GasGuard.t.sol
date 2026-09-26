@@ -19,6 +19,19 @@ contract GasGuardTest is EscrowTestBase {
         assertEq(escrow.pendingWithdrawal(address(contractDriver)), 0);
     }
 
+    /// @dev Mirrors PUSH_GAS_LIMIT / PUSH_GAS_MARGIN in ChargeMeshEscrow. Whenever the guard passes,
+    ///      the recipient must still receive the full stipend under Monad's worst-case CALL cost
+    ///      (cold account 10,100 + value transfer 9,000 + new account 25,000).
+    function test_guardMargin_coversMonadWorstCaseCallCost() public pure {
+        uint256 pushGasLimit = 100_000;
+        uint256 pushGasMargin = 50_000;
+        uint256 monadWorstCaseCallCost = 10_100 + 9_000 + 25_000;
+
+        uint256 minGasLeft = pushGasLimit * 64 / 63 + pushGasMargin;
+        uint256 forwarded = (minGasLeft - monadWorstCaseCallCost) * 63 / 64;
+        assertGe(forwarded, pushGasLimit);
+    }
+
     function test_expire_withEnoughGas_pushesToAcceptingContract() public {
         ToggleReceiver contractDriver = new ToggleReceiver(escrow);
         IChargeMeshEscrow.ReservationQuote memory q = _reserveWithContractDriver(address(contractDriver));

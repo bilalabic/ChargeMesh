@@ -29,8 +29,9 @@ contract ChargeMeshEscrow is IChargeMeshEscrow, Ownable2Step, EIP712, Reentrancy
     ///      that reverts or runs out of gas is credited in {pendingWithdrawal} instead (docs/04, M-1).
     uint256 internal constant PUSH_GAS_LIMIT = 100_000;
 
-    /// @dev Headroom for the CALL itself (value transfer, cold account access) on top of the stipend.
-    uint256 internal constant PUSH_GAS_MARGIN = 40_000;
+    /// @dev Headroom for the CALL itself on top of the stipend. Sized for Monad, where the worst case
+    ///      (value transfer to a cold, empty account) costs 10,100 + 9,000 + 25,000 = 44,100 gas.
+    uint256 internal constant PUSH_GAS_MARGIN = 50_000;
 
     /// @dev keccak256 of the EIP-712 type string. Must match
     ///      shared/src/chain/eip712.ts (RESERVATION_QUOTE_TYPESTRING) character for character.
