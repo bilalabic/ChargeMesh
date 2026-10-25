@@ -221,6 +221,11 @@ Proje hem Claude Code hem de Codex ile çalışmaya hazırdır:
 
 Paralel çalışmanın ayrıntıları, dal düzeni ve entegrasyon kontrol listesi [docs/07-paralel-calisma.md](docs/07-paralel-calisma.md) belgesinde.
 
+## Ekip
+
+- **Bilal Abiç** — [@bilalabic](https://github.com/bilalabic)
+- **Ahmet Turan Doğan** — [@AhmettDgn](https://github.com/AhmettDgn)
+
 ## Katkı kuralları
 
 - Commit mesajları İngilizce ve [Conventional Commits](https://www.conventionalcommits.org/) biçimindedir: `feat(frontend): add driver intent form`.
