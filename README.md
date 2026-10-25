@@ -6,7 +6,7 @@ Ofis otoparklarında, otellerde ve sitelerde gün boyu boşta bekleyen AC şarj 
 
 Rezervasyon ve ödeme Monad testnet üzerinde tutuluyor. Şarj oturumu OCPP protokolüyle ölçülüyor ve ödeme, talep edilen enerjiye göre değil, **gerçekten aktarılan enerjiye göre** kapanıyor.
 
-> Bu bir hackathon projesidir. Gerçek şarj hizmeti sunmaz, gerçek para tahsil etmez. Cihaz tarafı bir OCPP simülatörüyle canlandırılır.
+> Bu bir hackathon projesidir: Monad Blitz İstanbul için geliştirildi. Gerçek şarj hizmeti sunmaz, gerçek para tahsil etmez. Cihaz tarafı bir OCPP simülatörüyle canlandırılır.
 
 <p align="center">
   <img src="docs/images/readme/01-anasayfa.png" alt="ChargeMesh ana sayfası: Boşta duran şarj cihazı yok, rezerve edilmemiş kapasite var." width="100%">
